@@ -1,0 +1,17 @@
+[package]
+name = "recharts"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.94"
+publish = false
+description = "Port of the Recharts 3.8.0 npm package onto Div (sample-charts)"
+license = "Apache-2.0"
+
+# Ported source: recharts@3.8.0 and its dependencies as pinned in
+# tools/reference/package-lock.json. Each module names the file it ports.
+[dependencies]
+num-bigint = "0.4"
+num-traits = "0.2"
+
+[dev-dependencies]
+serde_json = "1"

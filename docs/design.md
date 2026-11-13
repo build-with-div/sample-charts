@@ -1,11 +1,14 @@
 # Charts on Div: design
 
-Status: phase 1 (investigation), revised 13 November 2026. No app code yet;
-the evidence is in [probes/](probes/).
+Status: phase 2 (porting) from 13 November 2026; see
+[Phase 2 milestones](#phase-2-milestones). The phase 1 evidence is in
+[probes/](probes/).
 
-Pinned Div: `565db46a` (build-with-div/div `main`). Statements about Div
-were checked against that source or measured with the probes; statements
-about npm packages were checked against their source at the versions named.
+The app is pinned to Div `92ea25a0`. The phase 1 statements and probe
+measurements below are for Div `565db46a` (build-with-div/div `main` then);
+statements about Div were checked against that source or measured with the
+probes; statements about npm packages were checked against their source at
+the versions named.
 Measurements: Windows 11, 24 cores, release build, headless `Document`, CPU
 raster, one run each unless stated.
 
@@ -281,7 +284,7 @@ Output goes to `docs/probes/out/` (ignored); the quoted runs are in
 ## Workarounds (scaffolding only)
 
 Allowed in the sample only to keep building, each labelled
-`// div-gap: <work item>` and logged in `docs/framework-gaps.md` (phase 2).
+`// div-gap: <id> <web feature>` and logged in `docs/framework-gaps.md`.
 
 | Scaffold | Replaced by |
 | --- | --- |
@@ -293,14 +296,23 @@ Allowed in the sample only to keep building, each labelled
 | Tooltip hit testing in data space for pie sectors | Item 10 |
 | Data-space dash-length maths instead of `getTotalLength` | Item 9 |
 
-## Phase 2 (when the parent says go)
+## Phase 2 milestones
 
-Small PRs, in order: the ported math (scales, ticks, curves, stack, layout)
-with unit tests against numbers from Recharts; the DOM-equality harness
-against Recharts pages in Chromium (it compares trees, so it works before
-Div renders SVG); shadcn's HTML parts (container, tooltip, legend) as Div
-elements with pixel comparisons; then the gallery on scaffolding. Each
-blocking gap is reported with its work item number as it is hit.
+One focused PR per step, each merged before the next. Ported logic is
+tested for equality with the pinned npm packages run under Node
+(`tools/reference`); rendering is compared with the same input rendered by
+the package in pinned Chromium 147, with measured numbers only.
+
+| # | Content | Runs on Div today | Gaps it reaches |
+| --- | --- | --- | --- |
+| M1 | Workspace pinned to Div `92ea25a0`, CI, app window; Recharts' numeric tick algorithm (`getNiceTickValues`, `getTickValuesFixedDomain`) with decimal.js-light's arithmetic, equal to recharts@3.8.0 on 3,487 generated cases | yes | V1 (no charts drawn) |
+| M2 | d3-scale as Recharts uses it (victory-vendor 37.4.1): linear, band, point, time, log; Recharts' axis domain and tick selection (`'auto'`, `dataMin`/`dataMax`, `allowDataOverflow`, interval and `minTickGap`) | yes | — (text measurement for `minTickGap` is V4/V2) |
+| M3 | d3-shape: curves (linear, natural, monotoneX, step, basis), stack and offsets, arcs and pie layout; Recharts' rectangle, sector and curve path strings, equal to the package's `d` attributes | yes | — |
+| M4 | Recharts' cartesian and polar layout producing the SVG element tree as data; DOM-equality harness against the same chart rendered by Recharts in Chromium 147 | partly (tree only) | V1, V2, V4, S1, S2, O1 |
+| M5 | shadcn's HTML parts (`ChartContainer` sizing, `ChartTooltipContent`, `ChartLegendContent`) as Div elements, pixel-compared with Chromium | yes, with cascade limits | S1, S2, S3 |
+| M6 | Gallery of shadcn's bar, line, area, pie, radar and radial examples through Div's SVG once V1 lands; until then the tree stays unrendered (no private SVG painter) | waits for V1 | V1, V2, V3, A1, R1, R7 |
+| M7 | Interaction: tooltip tracking, `accessibilityLayer` keyboard navigation, sector hover, brush | partly | V5, I1, I2 |
+| M8 | Chart.js port on Canvas 2D | waits for C1–C4 | C1–C4, O1, R1, R3 |
 
 ## Appendix: how the examples were counted
 
