@@ -98,6 +98,9 @@ pub fn to_pixels(data: &[(f64, f64)], width: f32, height: f32, pad: f32) -> Vec<
         .collect()
 }
 
+// div-gap: 1, 12 (docs/design.md work list). Scaffolding: Div has no inline
+// SVG shapes and no Canvas 2D, so the probes draw marks with Skia and show
+// them as an image. Not a proposed solution.
 /// Rasterize a stroked polyline with Skia into Div's decoded-RGBA image
 /// format (`image/x-openui-rgba8`: "OUIR", version 1, three zero bytes,
 /// little-endian width and height, then unpremultiplied RGBA rows).
