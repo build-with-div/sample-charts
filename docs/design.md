@@ -1,11 +1,14 @@
 # Charts on Div: design
 
-Status: phase 1 (investigation), revised 13 November 2026. No app code yet;
-the evidence is in [probes/](probes/).
+Status: phase 2 (porting) from 13 November 2026; see
+[Phase 2 milestones](#phase-2-milestones). The phase 1 evidence is in
+[probes/](probes/).
 
-Pinned Div: `565db46a` (build-with-div/div `main`). Statements about Div
-were checked against that source or measured with the probes; statements
-about npm packages were checked against their source at the versions named.
+The app is pinned to Div `92ea25a0`. The phase 1 statements and probe
+measurements below are for Div `565db46a` (build-with-div/div `main` then);
+statements about Div were checked against that source or measured with the
+probes; statements about npm packages were checked against their source at
+the versions named.
 Measurements: Windows 11, 24 cores, release build, headless `Document`, CPU
 raster, one run each unless stated.
 
@@ -90,17 +93,19 @@ optional for porting shadcn charts.
 | Backing store from `width`/`height` attributes and CSS size, `devicePixelRatio` | Sharp rendering at scale 2 | — |
 | Several stacked canvases | ECharts layers (hover layer over a 100k-point series) | — |
 
-The canvas session (sample-canvas) is designing Div's 2D context; the
-requests sent there are in the shared notes (`charts-canvas-api-requests.md`)
-and name these `CanvasRenderingContext2D` members.
+The engine owns Div's 2D context, as a new `div-canvas` crate (platform
+decision 8); the requests sent to the canvas design are in the shared notes
+(`charts-canvas-api-requests.md`) and name these `CanvasRenderingContext2D`
+members.
 
 Measurement plan for the canvas packages: record the 2D context calls that
 Chart.js and ECharts make for their sample charts in Chromium (a recording
 proxy around `CanvasRenderingContext2D`), giving both a ranked API list (as
 above for SVG) and replayable call traces. Replaying a trace through Div's
 canvas and through Chromium's, then diffing pixels, is the canvas fidelity
-test. WPT's `html/canvas` tests are mostly JavaScript testharness tests, which
-Div cannot run, so traces stand in for them.
+test for these packages. Div's canvas itself is tested with Rust tests
+generated from WPT's canvas YAML files (1,157 tests) and with the same kind
+of trace replay (platform decision 8).
 
 ## The Div work list
 
@@ -108,30 +113,37 @@ This is the main deliverable. Each item is a web platform feature to
 implement with Chromium's behaviour and pixels; Rust-typed handles on top
 are welcome, web semantics underneath. Owners: **engine** (div-dom,
 div-style, div-layout, div-paint, div-text, div-engine), **framework**
-(divui, div-platform, div-macros), **canvas** (the 2D canvas work),
-**components** (div-components). Sizes: S (days), M (one to two weeks),
+(divui, div-platform, div-macros; Canvas 2D is the engine's, in
+`div-canvas`), **components** (div-components). Sizes: S (days), M (one to two weeks),
 L (more). Priority: P0 blocks porting shadcn charts at all; P1 blocks some
 examples or behaviours; P2 later.
 
 | # | Platform feature | Examples | Owner | Size | Pri | Measured by |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | **Inline SVG core:** `svg` sizing (`width`, `height`, `viewBox`, `preserveAspectRatio`), `g`, `path` (full `d` grammar incl. arcs and Béziers), `line`, `rect`, `circle`, `ellipse`, `polygon`, `polyline`; presentation attributes; `fill`, `stroke`, `stroke-width`, `-linecap`, `-linejoin`, `-miterlimit`, `-dasharray`, `-dashoffset`, `opacity`, `fill-opacity`, `stroke-opacity`, `transform`; painted with Chromium's SVG paint setup | 70 | engine | L | P0 | WPT `svg/shapes`, `svg/painting`, `svg/path`, `svg/coordinate-systems`; harness |
+| 1 | **Inline SVG core:** `svg` sizing (`width`, `height`, `viewBox`, `preserveAspectRatio`), `g`, `path` (full `d` grammar incl. arcs and Béziers), `line`, `rect`, `circle`, `ellipse`, `polygon`, `polyline`; presentation attributes; `fill`, `stroke`, `stroke-width`, `-linecap`, `-linejoin`, `-miterlimit`, `-dasharray`, `-dashoffset`, `opacity`, `fill-opacity`, `stroke-opacity`, `transform`; painted with Chromium's SVG paint setup. Scheduled right after the engine's Tier 0 items; the stroked-icons item becomes its stage 1, not a second painter; `view!` uses SVG's real attribute names (`stroke-width`, `viewBox`, case-sensitive) | 70 | engine (painting), framework (`view!` names) | L | P0 | WPT `svg/shapes`, `svg/painting`, `svg/path`, `svg/coordinate-systems`; harness |
 | 2 | **SVG text:** `text`, `tspan`, `x`/`y`/`dx`/`dy` (incl. `em`), `text-anchor`, `dominant-baseline`, fonts from CSS | 60 | engine | L | P0 | WPT `svg/text`; harness |
-| 3 | **CSS on SVG:** stylesheets (`<style>`), class/attribute/descendant selectors, SVG properties as CSS (`fill`, `stroke`, …), `outline` | 70 | engine | L (cascade in progress) | P0 | WPT `css/selectors`, `svg/styling`; harness |
-| 4 | **CSS custom properties** and `var()`, including in SVG paint | 69 | engine | M | P0 | WPT `css/css-variables` |
-| 5 | **`ResizeObserver`** (typed observer on `Element`, Chromium's notification timing) | 70 | framework (engine supplies sizes) | M | P0 | WPT `resize-observer` (JS; port the cases) |
-| 6 | **`requestAnimationFrame`** tied to the frame clock, driven by `advance_time` in headless tests | 70 (mount animation, `isAnimationActive: 'auto'`) | framework | M | P0 | Frame-time traces against Chromium |
+| 3 | **CSS on SVG:** stylesheets (`<style>`), class/attribute/descendant selectors, SVG properties as CSS (`fill`, `stroke`, …), `outline`; shadcn's `ChartStyle` sheet through the browser-compatible ingestion mode for third-party sheets (drops what Chromium drops and reports it), beside compile-time checking for Div-authored CSS | 70 | engine | L (cascade in progress) | P0 | WPT `css/selectors`, `svg/styling`; harness |
+| 4 | **CSS custom properties** and `var()`, including in SVG paint, and runtime writes (`style.setProperty('--x', …)`) | 69 | engine (framework: runtime API) | M | P0 | WPT `css/css-variables` |
+| 5 | **`ResizeObserver`**: one API with content, border and device-pixel-content boxes; the engine computes observations after layout, the framework delivers them before paint, with Chromium's timing | 70 | engine + framework | M | P0 | WPT `resize-observer` (JS; port the cases) |
+| 6 | **`requestAnimationFrame`** per document, returning a typed handle, in every window; tied to the frame clock and driven by `advance_time` in headless tests | 70 (mount animation, `isAnimationActive: 'auto'`) | framework | M | P0 | Frame-time traces against Chromium |
 | 7 | **Focus and accessibility in SVG:** `tabindex`, `role`, `aria-*` on SVG elements, focus outline, graphics roles in the accessibility tree | 70 | engine + framework | M | P1 | Components trace harness (focus/DOM state) |
 | 8 | **Paint servers and clipping:** `defs`, `linearGradient`, `radialGradient`, `stop`, `pattern`, `clipPath`, `url(#id)` references | 10 (clip), 2 (gradient) | engine | M | P1 | WPT `svg/pservers`, `css/css-masking/clip-path` |
 | 9 | **SVG geometry APIs:** `getBBox`, `getTotalLength`, `getPointAtLength`, `getComputedTextLength` | 10+ | framework (engine geometry) | M | P1 | WPT `svg/types` cases, ported |
 | 10 | **Hit testing on SVG geometry** and `pointer-events` for SVG | 10 | engine | M | P1 | Harness: hover traces on pie sectors |
-| 11 | **CSS transitions and animations on SVG properties** (`stroke-dasharray`, `transform`, `opacity`) | 10+ | engine | M | P1 | WPT `css/css-transitions` with SVG targets |
-| 12 | **Canvas 2D** (`CanvasRenderingContext2D`, `Path2D`, `TextMetrics`), backing store and DPR, stacked canvases | Chart.js, ECharts | canvas | L | P0 for canvas packages | Call-trace replay vs Chromium |
+| 11 | **CSS transitions and animations on SVG properties** (`stroke-dasharray`, `transform`, `opacity`), through the one Web Animations surface (CSS animations in `getAnimations()`) | 10+ | engine | M | P1 | WPT `css/css-transitions` with SVG targets |
+| 12 | **Canvas 2D** (`CanvasRenderingContext2D`, `Path2D`, `TextMetrics`), backing store and DPR, stacked canvases | Chart.js, ECharts | engine (`div-canvas`) | L | P0 for canvas packages | Rust tests generated from WPT's canvas YAML (1,157); call-trace replay vs Chromium |
 | 13 | `<svg>` and `<canvas>` intrinsic size from attributes and defaults (HTML: 200×100 from the attributes, 300×150 for a bare canvas; Div: 300×0 for both; Chromium not yet measured here) | 70 | engine | S | P0 | WPT `html/rendering/replaced-elements` |
 | 14 | `contextmenu` event; right click must not fire `click` | — | framework | S | P1 | Event traces vs Chromium |
 | 15 | Per-element cost: 10,000 positioned elements take about 1.9 s to build, lay out and paint (probe 2). Recharts emits one SVG element per dot, label and grid line, so this becomes the inline-SVG cost too | — | engine + framework | M | P1 | Probe 2 against Chromium timing (to measure) |
 | 16 | Component context so `view!` can compose `<AreaChart><XAxis/>…</AreaChart>` as Recharts does | — | framework | M (in progress, RFC 0003 (a)) | P1 | — |
 | 17 | Replaceable or releasable image resources (resources are append-only; decoded images cached for the thread's life) | Scaffolding only | engine | S | P2 | Probe 3 streaming |
+
+Rows 1, 3–6, 11 and 12 follow the platform design decisions the user
+accepted on 13 November 2026 (`platform-plan/decisions-2026-11-13.md`,
+decisions 2, 3, 4, 8 and 9). The owning tracks record them in their own
+RFCs; the API details of `requestAnimationFrame`, `ResizeObserver` and
+Pointer Events (mouse `pointerId` 1, typed enums and bitflags with web
+values) come from the framework's RFC.
 
 Workarounds are not on this list; the scaffolding they replace is in
 [Workarounds](#workarounds-scaffolding-only). The RFC draft for items 1–11
@@ -281,7 +293,7 @@ Output goes to `docs/probes/out/` (ignored); the quoted runs are in
 ## Workarounds (scaffolding only)
 
 Allowed in the sample only to keep building, each labelled
-`// div-gap: <work item>` and logged in `docs/framework-gaps.md` (phase 2).
+`// div-gap: <id> <web feature>` and logged in `docs/framework-gaps.md`.
 
 | Scaffold | Replaced by |
 | --- | --- |
@@ -293,14 +305,23 @@ Allowed in the sample only to keep building, each labelled
 | Tooltip hit testing in data space for pie sectors | Item 10 |
 | Data-space dash-length maths instead of `getTotalLength` | Item 9 |
 
-## Phase 2 (when the parent says go)
+## Phase 2 milestones
 
-Small PRs, in order: the ported math (scales, ticks, curves, stack, layout)
-with unit tests against numbers from Recharts; the DOM-equality harness
-against Recharts pages in Chromium (it compares trees, so it works before
-Div renders SVG); shadcn's HTML parts (container, tooltip, legend) as Div
-elements with pixel comparisons; then the gallery on scaffolding. Each
-blocking gap is reported with its work item number as it is hit.
+One focused PR per step, each merged before the next. Ported logic is
+tested for equality with the pinned npm packages run under Node
+(`tools/reference`); rendering is compared with the same input rendered by
+the package in pinned Chromium 147, with measured numbers only.
+
+| # | Content | Runs on Div today | Gaps it reaches |
+| --- | --- | --- | --- |
+| M1 | Workspace pinned to Div `92ea25a0`, CI, app window; Recharts' numeric tick algorithm (`getNiceTickValues`, `getTickValuesFixedDomain`) with decimal.js-light's arithmetic, equal to recharts@3.8.0 on 3,487 generated cases | yes | V1 (no charts drawn) |
+| M2 | d3-scale as Recharts uses it (victory-vendor 37.4.1): linear, band, point, time, log; Recharts' axis domain and tick selection (`'auto'`, `dataMin`/`dataMax`, `allowDataOverflow`, interval and `minTickGap`) | yes | — (text measurement for `minTickGap` is V4/V2) |
+| M3 | d3-shape: curves (linear, natural, monotoneX, step, basis), stack and offsets, arcs and pie layout; Recharts' rectangle, sector and curve path strings, equal to the package's `d` attributes | yes | — |
+| M4 | Recharts' cartesian and polar layout producing the SVG element tree as data; DOM-equality harness against the same chart rendered by Recharts in Chromium 147 | partly (tree only) | V1, V2, V4, S1, S2, O1 |
+| M5 | shadcn's HTML parts (`ChartContainer` sizing, `ChartTooltipContent`, `ChartLegendContent`) as Div elements, pixel-compared with Chromium | yes, with cascade limits | S1, S2, S3 |
+| M6 | Gallery of shadcn's bar, line, area, pie, radar and radial examples through Div's SVG once V1 lands; until then the tree stays unrendered (no private SVG painter) | waits for V1 | V1, V2, V3, A1, R1, R7 |
+| M7 | Interaction: tooltip tracking, `accessibilityLayer` keyboard navigation, sector hover, brush | partly | V5, I1, I2 |
+| M8 | Chart.js port on Canvas 2D | waits for C1–C4 | C1–C4, O1, R1, R3 |
 
 ## Appendix: how the examples were counted
 
