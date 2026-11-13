@@ -4,6 +4,15 @@ Status: draft from the charts sample (build-with-div/sample-charts),
 13 November 2026, against Div `565db46a`. For the engine and framework
 tracks to accept, change or split. Nothing here edits Div.
 
+Aligned with the platform design decisions accepted on 13 November 2026
+(`platform-plan/decisions-2026-11-13.md`): inline SVG painted Chromium's
+way starts right after the engine's Tier 0 items, and the scheduled
+stroked-icons item is its stage 1 rather than a second painter (decision
+3); `view!` uses SVG's real attribute names (decision 3); shadcn's
+`ChartStyle` sheet goes through the browser-compatible ingestion mode and
+runtime custom-property writes are supported (decision 2); the shapes of
+`ResizeObserver` and `requestAnimationFrame` follow decision 4.
+
 ## Summary
 
 Implement inline SVG in Div as the web platform defines it and as pinned
@@ -44,7 +53,9 @@ sample-charts `docs/design.md`.
 
 - SVG elements are elements in Div's tree with the SVG namespace, created
   from `view!` and `Element::create` with their case-sensitive names
-  (`clipPath`, `linearGradient`, `foreignObject`). Today `tag_definition`
+  (`clipPath`, `linearGradient`, `foreignObject`); `view!` spells
+  attributes with their real names (`stroke-width`, `viewBox`,
+  `xlink:href`), as decided. Today `tag_definition`
   lowercases names; SVG names must keep their case.
 - Attributes keep web semantics and names (`d`, `viewBox`, `stroke-width`,
   `text-anchor`, `transform`, `clip-path`, `href`/`xlink:href`).
@@ -67,7 +78,9 @@ sample-charts `docs/design.md`.
   `visibility`, `display`, `transform`, `transform-origin`, `transform-box`.
 - Depends on the stylesheet cascade and selectors (in progress) and on CSS
   custom properties (missing): shadcn sets colours as
-  `fill="var(--color-desktop)"` with the variables in a `<style>` element.
+  `fill="var(--color-desktop)"` with the variables in a `<style>` element
+  (`ChartStyle`), a third-party sheet read through the browser-compatible
+  ingestion mode, which drops what Chromium drops and reports it.
 
 ### Layout
 
@@ -127,12 +140,14 @@ On SVG element handles, typed: `bbox()` (`getBBox`), `total_length()`
 
 ## Two framework features the packages need
 
-- **`ResizeObserver`**: observe an element's content and border box; batch
-  notifications per frame with Chromium's ordering and loop-limit rule;
-  typed entries. Every Recharts chart (`ResponsiveContainer`) and Chart.js
+- **`ResizeObserver`**: one API observing an element's content, border or
+  device-pixel-content box; the engine computes observations after layout
+  and the framework delivers them before paint, with Chromium's ordering and
+  loop-limit rule; typed entries. Every Recharts chart (`ResponsiveContainer`) and Chart.js
   chart uses it.
-- **`requestAnimationFrame`**: callbacks run once per frame before style and
-  layout with the frame timestamp, as in Chromium; headless tests drive
+- **`requestAnimationFrame`**: per document, returning a typed handle, in
+  every window; callbacks run once per frame before style and layout with
+  the frame timestamp, as in Chromium; headless tests drive
   them with `Document::advance_time`/`begin_frame`. Recharts animates every
   series on mount with it; Chart.js and ECharts animate with it.
 
@@ -151,15 +166,14 @@ On SVG element handles, typed: `bbox()` (`getBBox`), `total_length()`
 
 | Stage | Content | Owner | Size |
 | --- | --- | --- | --- |
-| 1 | Namespace, element names, `svg` sizing and `viewBox`; `g`, `path`, `line`, `rect`, `circle`, `ellipse`, `polygon`, `polyline`; fill and stroke properties; `transform`; Chromium-matched shape painting | engine | L |
+| 1 | Namespace, element names, `svg` sizing and `viewBox`; `g`, `path`, `line`, `rect`, `circle`, `ellipse`, `polygon`, `polyline`; fill and stroke properties; `transform`; Chromium-matched shape painting; static SVG images (stroked icons) through the same tree and painter; `view!` with SVG's attribute names | engine (painting), framework (`view!`) | L |
 | 2 | `text`, `tspan`, anchors and baselines | engine | L |
 | 3 | SVG properties in the cascade, presentation attributes, `var()` | engine (with the cascade work) | M after the cascade |
 | 4 | `defs`, gradients, `pattern`, `clipPath`, `url(#id)` | engine | M |
 | 5 | Geometry hit testing, `pointer-events`; focus, `tabindex`, accessibility roles | engine + framework | M |
 | 6 | Geometry methods (`getBBox`, `getTotalLength`, …) | framework (engine geometry) | M |
 | 7 | Transitions and animations on SVG properties | engine | M |
-| 8 | Static SVG images through the same tree and painter | engine | S after stage 1 |
-| — | `ResizeObserver` | framework | M |
+| — | `ResizeObserver` | engine (observations) + framework (delivery) | M |
 | — | `requestAnimationFrame` | framework | M |
 
 Stages 1 and 3 unblock 70 of 70 examples for static shapes; stage 2 brings
@@ -174,5 +188,5 @@ the 60 with text.
   the same page should be measured before setting a target.
 - Whether `foreignObject`'s existing support moves under the new SVG tree
   unchanged.
-- How `view!` spells SVG attributes that are not Rust identifiers
-  (`stroke-width`, `xlink:href`) and case-sensitive element names.
+- Resolved: `view!` uses SVG's real attribute names and case-sensitive
+  element names (decision 3).
