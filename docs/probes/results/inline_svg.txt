@@ -1,0 +1,25 @@
+
+svg: created, kind Svg
+g: UnknownTag("g")
+path: UnknownTag("path")
+line: UnknownTag("line")
+rect: UnknownTag("rect")
+circle: UnknownTag("circle")
+polygon: UnknownTag("polygon")
+text: UnknownTag("text")
+tspan: UnknownTag("tspan")
+defs: UnknownTag("defs")
+clipPath: UnknownTag("clipPath")
+linearGradient: UnknownTag("linearGradient")
+radialGradient: UnknownTag("radialGradient")
+stop: UnknownTag("stop")
+pattern: UnknownTag("pattern")
+marker: UnknownTag("marker")
+title: UnknownTag("title")
+desc: UnknownTag("desc")
+foreignObject: created, kind Div
+Element::create_svg_foreign_object: Ok(Div)
+<svg width=200 height=100>: box Some(SceneRect { x: 0.0, y: 14.5, width: 300.0, height: 0.0 })
+<canvas>: box Some(SceneRect { x: 0.0, y: 32.5, width: 300.0, height: 0.0 })
+ink in the page: 0 px
+

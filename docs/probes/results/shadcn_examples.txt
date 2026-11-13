@@ -1,0 +1,18 @@
+examples: 70
+| svg root, g layers, path | 70 |
+| focusable svg (accessibilityLayer default) | 70 |
+| ResizeObserver | 70 |
+| CSS stylesheet cascade on SVG | 70 |
+| CSS custom properties in SVG paint | 69 |
+| mouse events on wrapper (tooltip) | 67 |
+| text/tspan | 60 |
+| line | 44 |
+| path arcs (A) | 34 |
+| circle | 28 |
+| fill-opacity / stroke-opacity | 25 |
+| cubic Beziers (C) | 16 |
+| stroke-dasharray | 11 |
+| hit testing on SVG shapes | 10 |
+| getTotalLength | 10 |
+| clipPath | 10 |
+| linearGradient | 2 |
