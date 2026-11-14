@@ -1,0 +1,224 @@
+// Generates the fixtures of the d3-shape port and of Recharts' Curve path by
+// running the pinned packages as a page bundles them: d3-shape 3.2.1 and
+// d3-path 3.1.1 through victory-vendor, and Recharts' browser build
+// (`recharts/es6/shape/Curve.js`). See esm-loader.mjs.
+//
+//   npm ci --ignore-scripts
+//   node shape_fixtures.mjs          # write the fixtures
+//   node shape_fixtures.mjs --check  # fail if the committed fixtures differ
+//
+// Writes crates/d3/tests/fixtures/shape.json and
+// crates/recharts/tests/fixtures/curve.json. Values are tagged as in
+// axis_fixtures.mjs: "u" undefined, null, booleans, "n:<String(n)>" numbers,
+// "s:<text>" strings, [..] arrays, {"o": {..}} objects.
+//
+// The line and area generators and the curves Recharts uses only add,
+// multiply and divide, and paths are rounded with Math.round, so the
+// results do not depend on the platform's math library.
+
+import { register } from "node:module";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, "..", "..");
+register(pathToFileURL(join(here, "esm-loader.mjs")));
+
+function enc(v) {
+  if (v === undefined) return "u";
+  if (v === null) return null;
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return "n:" + (Object.is(v, -0) ? "-0" : String(v));
+  if (typeof v === "string") return "s:" + v;
+  if (Array.isArray(v)) return Array.from(v, enc);
+  if (typeof v === "object") {
+    return { o: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, enc(x)])) };
+  }
+  throw new Error("cannot encode a " + typeof v);
+}
+
+let seed = 0x5ea9e;
+function rand() {
+  seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+  return seed / 2 ** 32;
+}
+const pick = (list) => list[Math.floor(rand() * list.length)];
+const chance = (p) => rand() < p;
+const int = (lo, hi) => lo + Math.floor(rand() * (hi - lo + 1));
+const pow10 = (n) => Number(`1e${n}`);
+
+// A coordinate a chart could produce: mostly pixels with a fraction, at
+// times large, tiny, negative, -0 or repeated.
+function coordinate(previous) {
+  const r = rand();
+  if (previous !== undefined && r < 0.08) return previous;
+  if (r < 0.1) return -0;
+  if (r < 0.14) return pick([1e7, 123456789.123, 1e-7, 0.0005, 0.0015, 2.5e-4]) * (chance(0.5) ? -1 : 1);
+  const v = int(-50, 800) + (chance(0.7) ? Math.round(rand() * pow10(int(1, 15))) / pow10(int(1, 15)) : 0);
+  return chance(0.1) ? v + 0.1 + 0.2 : v;
+}
+
+function series(n) {
+  const xs = [];
+  let x = int(-20, 100);
+  for (let i = 0; i < n; i++) {
+    if (chance(0.85)) x += pick([0, int(1, 80), rand() * 50]);
+    else x = coordinate(x);
+    xs.push(x);
+  }
+  if (chance(0.3)) xs.reverse();
+  return xs;
+}
+
+const CURVES = [
+  "curveBasis", "curveBasisClosed", "curveBasisOpen", "curveBumpX", "curveBumpY", "curveLinear",
+  "curveLinearClosed", "curveMonotoneX", "curveMonotoneY", "curveNatural", "curveStep",
+  "curveStepAfter", "curveStepBefore",
+];
+
+function d3Fixture(d3) {
+  const cases = [];
+  for (let i = 0; i < 2000; i++) {
+    const curve = CURVES[i % CURVES.length];
+    const n = pick([0, 1, 1, 2, 2, 3, 3, 4, 5, 6, 8, 12]);
+    const xs = series(n);
+    let previous;
+    const points = xs.map((x) => {
+      if (chance(0.12)) return null; // not defined
+      const y = coordinate(previous);
+      previous = y;
+      return [x, y, coordinate(), coordinate()];
+    });
+    const kind = chance(0.5) ? "line" : "area";
+    const digits = pick([3, 3, 3, null, 0, 1, 6, 15, 16]);
+    const hasX1 = kind === "area" && chance(0.3);
+    const hasY1 = kind === "area" && !hasX1 ? chance(0.8) : kind === "area" && chance(0.2);
+    let path;
+    const defined = (d) => d !== null;
+    if (kind === "line") {
+      path = d3.line((d) => d[0], (d) => d[1]).defined(defined).curve(d3[curve]).digits(digits)(points);
+    } else {
+      const a = d3.area().defined(defined).curve(d3[curve]).digits(digits);
+      a.x0((d) => d[0]).y0((d) => d[2]);
+      if (hasX1) a.x1((d) => d[3]);
+      // d3.area()'s y1 defaults to d => d[1]; null removes it.
+      a.y1(hasY1 ? (d) => d[1] : null);
+      path = a(points);
+    }
+    cases.push({
+      kind,
+      curve,
+      digits: enc(digits),
+      hasX1,
+      hasY1,
+      points: enc(points),
+      path: enc(path),
+    });
+  }
+  return cases;
+}
+
+const TYPES = [
+  undefined, "linear", "monotone", "monotoneX", "monotoneY", "bump", "bumpX", "bumpY", "natural", "step",
+  "stepBefore", "stepAfter", "basis", "basisClosed", "basisOpen", "linearClosed", "unknown", "Linear", "",
+];
+
+function curveValue(previous) {
+  const r = rand();
+  if (r < 0.04) return null;
+  if (r < 0.06) return undefined;
+  if (r < 0.08) return NaN;
+  if (r < 0.09) return pick([Infinity, -Infinity]);
+  if (r < 0.1) return "12";
+  return coordinate(previous);
+}
+
+function rechartsFixture(getPath) {
+  const cases = [];
+  for (let i = 0; i < 2000; i++) {
+    const n = pick([0, 1, 2, 3, 4, 5, 6, 7, 12]);
+    const xs = series(n);
+    let previous;
+    const points = xs.map((x) => {
+      const y = curveValue(previous);
+      previous = y;
+      return { x: chance(0.05) ? curveValue() : x, y };
+    });
+    const r = rand();
+    let baseLine;
+    if (r < 0.35) baseLine = undefined;
+    else if (r < 0.6) baseLine = pick([0, 300, 452.5, -12.25, NaN, Infinity, "0", null]);
+    else
+      baseLine = points
+        .map((p) => (chance(0.08) ? null : { x: chance(0.5) ? p.x : curveValue(), y: chance(0.5) ? 300 : curveValue() }))
+        .slice(0, chance(0.1) ? Math.max(0, n - 1) : n);
+    const input = {
+      type: pick(TYPES),
+      points,
+      baseLine,
+      layout: pick([undefined, "horizontal", "horizontal", "vertical", "vertical", "centric", ""]),
+      connectNulls: chance(0.3),
+    };
+    let path;
+    try {
+      path = enc(getPath(input));
+    } catch (error) {
+      path = { error: String(error.message) };
+    }
+    cases.push({ input: enc(input), path });
+  }
+  return cases;
+}
+
+function serialize(content) {
+  const lines = ["{"];
+  const entries = Object.entries(content);
+  entries.forEach(([key, v], i) => {
+    const comma = i + 1 < entries.length ? "," : "";
+    if (Array.isArray(v) && v.length && typeof v[0] === "object") {
+      lines.push(`  ${JSON.stringify(key)}: [`);
+      v.forEach((item, j) => lines.push(`    ${JSON.stringify(item)}${j + 1 < v.length ? "," : ""}`));
+      lines.push(`  ]${comma}`);
+    } else {
+      lines.push(`  ${JSON.stringify(key)}: ${JSON.stringify(v)}${comma}`);
+    }
+  });
+  lines.push("}");
+  return lines.join("\n") + "\n";
+}
+
+const d3 = await import("victory-vendor/d3-shape");
+const { getPath } = await import(pathToFileURL(join(here, "node_modules", "recharts", "es6", "shape", "Curve.js")).href);
+const pin = JSON.parse(readFileSync(join(here, "package-lock.json"), "utf8")).packages;
+const versions = Object.fromEntries(
+  ["recharts", "d3-shape", "d3-path", "victory-vendor"].map((name) => [name, pin[`node_modules/${name}`].version]),
+);
+const generator = `tools/reference/shape_fixtures.mjs (Node ${process.versions.node}, V8 ${process.versions.v8})`;
+const files = {
+  "crates/d3/tests/fixtures/shape.json": { generator, versions, cases: d3Fixture(d3) },
+  "crates/recharts/tests/fixtures/curve.json": { generator, versions, cases: rechartsFixture(getPath) },
+};
+const check = process.argv.includes("--check");
+const stale = [];
+for (const [path, content] of Object.entries(files)) {
+  const text = serialize(content);
+  const file = join(root, path);
+  if (check) {
+    let old = null;
+    try {
+      old = readFileSync(file, "utf8");
+    } catch {
+      // missing
+    }
+    if (old !== text) stale.push(path);
+  } else {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, text);
+    console.log(`wrote ${path} (${(text.length / 1024).toFixed(0)} KiB, ${content.cases.length} cases)`);
+  }
+}
+if (stale.length) {
+  console.error(`fixtures differ from the packages' output: ${stale.join(", ")}; run node shape_fixtures.mjs`);
+  process.exit(1);
+}
