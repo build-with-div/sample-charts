@@ -12,7 +12,12 @@
 //
 // Values are written tagged, so the Rust side rebuilds them exactly:
 // "u" undefined, null, true/false, "n:<String(n)>" numbers ("n:-0" for -0),
-// "s:<text>" strings, [..] arrays, {"o": {..}} objects.
+// "s:<text>" strings, "t:<ms since the epoch>" Dates, [..] arrays,
+// {"o": {..}} objects.
+//
+// Time scales tick in the local time zone (d3-time's local intervals), so
+// the generator runs in UTC whatever the machine's zone; it sets TZ before
+// any worker starts.
 //
 // Math.pow is not the same everywhere. Chromium 147's V8 calls the C
 // library's pow (V8 12.4, in Node 22, used fdlibm's; V8's main branch now
@@ -28,6 +33,10 @@
 // 10^-4; Node 24.22.3 gave Chromium 147's result on every call measured).
 
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
+
+// Before any Date is made, in the main thread and in each worker.
+process.env.TZ = "UTC";
+if (new Date(0).getTimezoneOffset() !== 0) throw new Error("could not switch to UTC");
 import { register } from "node:module";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -44,6 +53,7 @@ function enc(v) {
   if (typeof v === "boolean") return v;
   if (typeof v === "number") return "n:" + (Object.is(v, -0) ? "-0" : String(v));
   if (typeof v === "string") return "s:" + v;
+  if (v instanceof Date) return "t:" + v.getTime();
   if (Array.isArray(v)) return Array.from(v, enc);
   if (typeof v === "object") {
     return { o: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, enc(x)])) };

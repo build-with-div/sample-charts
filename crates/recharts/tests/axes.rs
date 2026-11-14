@@ -26,6 +26,7 @@ fn decode(json: &Json) -> Value {
         Json::Null => Value::Null,
         Json::Bool(b) => Value::Bool(*b),
         Json::String(s) if s == "u" => Value::Undefined,
+        Json::String(s) if s.starts_with("t:") => panic!("Date values are not modelled yet: {s}"),
         Json::String(s) => match s.strip_prefix("n:") {
             Some(n) => Value::Number(match n {
                 "NaN" => f64::NAN,
