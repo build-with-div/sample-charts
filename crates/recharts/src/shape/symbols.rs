@@ -2,12 +2,12 @@
 //! scatter points), through d3-shape's symbol generator.
 //!
 //! Symbols registered at run time (`Symbols.registerSymbol`) are not
-//! modelled. The star needs `Math.tan` (its size by diameter) and
-//! `Math.sin`/`Math.cos` (its points) as Chromium computes them, not ported
-//! yet: it returns [`PathError::Trigonometry`].
+//! modelled. The star's size by diameter takes `Math.tan`
+//! ([`js::math::tan`], V8's fdlibm).
 
 use d3::path::PathError;
 use d3::shape::{symbol, SymbolType};
+use js::math::{pow, tan};
 use js::number_to_string;
 
 use super::upper_first;
@@ -38,21 +38,23 @@ fn symbol_factory(r#type: &str) -> SymbolType {
 
 /// `calculateAreaSize(size, sizeType, type)`: `size` is an area unless
 /// `sizeType` is something other than `'area'`, when it is a diameter.
-fn area_size(size: f64, size_type: &str, r#type: &str) -> Result<f64, PathError> {
+fn area_size(size: f64, size_type: &str, r#type: &str) -> f64 {
     if size_type == "area" {
-        return Ok(size);
+        return size;
     }
     let sqrt3 = 3f64.sqrt();
-    Ok(match r#type {
+    match r#type {
         "cross" => 5.0 * size * size / 9.0,
         "diamond" => 0.5 * size * size / sqrt3,
         "square" => size * size,
-        // 1.25 * size * size * (Math.tan(angle) - Math.tan(angle * 2) * Math.tan(angle) ** 2)
-        "star" => return Err(PathError::Trigonometry),
+        "star" => {
+            let angle = 18.0 * (PI / 180.0);
+            1.25 * size * size * (tan(angle) - tan(angle * 2.0) * pow(tan(angle), 2.0))
+        }
         "triangle" => sqrt3 * size * size / 4.0,
         "wye" => (21.0 - 10.0 * sqrt3) * size * size / 8.0,
         _ => PI * size * size / 4.0,
-    })
+    }
 }
 
 /// `<Symbols type size sizeType cx cy>`: `type` is `None` when it is not a
@@ -76,7 +78,7 @@ pub fn symbols(
     if cx.is_nan() || cy.is_nan() || size.is_nan() {
         return Ok(None);
     }
-    let area = area_size(size, size_type, real_type)?;
+    let area = area_size(size, size_type, real_type);
     let d = symbol(symbol_factory(real_type), area)?;
     Ok(Some(SymbolsPath {
         transform: format!(

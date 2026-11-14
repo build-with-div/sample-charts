@@ -26,5 +26,18 @@
   {"fn": "sin", "x": "5.969026041820607", "chrome": "-0.3090169943749477", "correctlyRounded": "-0.3090169943749476", "exactMinusCorrectlyRoundedUlp": "-0.4972"},
   {"fn": "sin", "x": "59611116.90849066", "chrome": "-0.4860691782898029", "correctlyRounded": "-0.48606917828980295", "exactMinusCorrectlyRoundedUlp": "+0.4999"},
   {"fn": "sin", "x": "20138844754.546883", "chrome": "-0.8220184452772794", "correctlyRounded": "-0.8220184452772795", "exactMinusCorrectlyRoundedUlp": "+0.4993"},
-  {"fn": "sin", "x": "4.0202214475721125e+206", "chrome": "-0.22704229990031805", "correctlyRounded": "-0.22704229990031802", "exactMinusCorrectlyRoundedUlp": "-0.4887"}
+  {"fn": "sin", "x": "4.0202214475721125e+206", "chrome": "-0.22704229990031805", "correctlyRounded": "-0.22704229990031802", "exactMinusCorrectlyRoundedUlp": "-0.4887"},
+  {"fn": "cos", "x": "1.3072071051764516", "chrome": "0.26054747632632774", "correctlyRounded": "0.2605474763263277", "exactMinusCorrectlyRoundedUlp": "+0.4979"},
+  {"fn": "sin", "x": "-2.778099631030123", "chrome": "-0.35554118626271436", "correctlyRounded": "-0.3555411862627144", "exactMinusCorrectlyRoundedUlp": "+0.4998"},
+  {"fn": "cos", "x": "-1.235619811854321", "chrome": "0.3289358672809046", "correctlyRounded": "0.3289358672809047", "exactMinusCorrectlyRoundedUlp": "-0.4994"},
+  {"fn": "sin", "x": "-0.36616863903993163", "chrome": "-0.3580407039779858", "correctlyRounded": "-0.35804070397798576", "exactMinusCorrectlyRoundedUlp": "-0.4999"},
+  {"fn": "sin", "x": "-3.2846892040249216", "chrome": "0.14260869450525326", "correctlyRounded": "0.14260869450525324", "exactMinusCorrectlyRoundedUlp": "+0.4991"},
+  {"fn": "cos", "x": "4.576464757372103", "chrome": "-0.1355060672077485", "correctlyRounded": "-0.13550606720774852", "exactMinusCorrectlyRoundedUlp": "+0.4988"},
+  {"fn": "sin", "x": "3.5519417091374645", "chrome": "-0.39892942980577595", "correctlyRounded": "-0.398929429805776", "exactMinusCorrectlyRoundedUlp": "+0.4990"},
+  {"fn": "sin", "x": "3.3079061524663977", "chrome": "-0.16554784832897523", "correctlyRounded": "-0.16554784832897526", "exactMinusCorrectlyRoundedUlp": "+0.4932"},
+  {"fn": "sin", "x": "-6.140409883228564", "chrome": "0.1422908428600687", "correctlyRounded": "0.14229084286006874", "exactMinusCorrectlyRoundedUlp": "-0.4886"},
+  {"fn": "sin", "x": "-2.7219483529822286", "chrome": "-0.4074356420897649", "correctlyRounded": "-0.40743564208976485", "exactMinusCorrectlyRoundedUlp": "-0.4985"},
+  {"fn": "sin", "x": "1.044716365963687", "chrome": "0.8647821466947507", "correctlyRounded": "0.8647821466947508", "exactMinusCorrectlyRoundedUlp": "-0.4998"},
+  {"fn": "sin", "x": "5.710334963512785", "chrome": "-0.5420295604894632", "correctlyRounded": "-0.542029560489463", "exactMinusCorrectlyRoundedUlp": "-0.4995"},
+  {"fn": "sin", "x": "-4.249564693344798", "chrome": "0.8947950885849458", "correctlyRounded": "0.8947950885849459", "exactMinusCorrectlyRoundedUlp": "-0.4996"}
 ]

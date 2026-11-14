@@ -2,12 +2,11 @@
 //! `fixtures/shapes.json` holds their props and the `<path>` React's server
 //! renderer writes for them (nothing, or its `d` and `transform`), written
 //! by `tools/reference/shape_fixtures.mjs`. Every attribute must be the same
-//! string. Star symbols need Chromium's `Math.sin`/`Math.cos`, not ported
-//! yet; the test accepts that only for them and prints the count.
+//! string. The fixtures' `Math.sin` and `Math.cos` results are Chrome
+//! 147's (`tools/reference/chrome_trig.mjs`), not Node's.
 
-use d3::path::PathError;
 use js::Value;
-use recharts::shape::{rectangle, symbols, Radius};
+use recharts::shape::{rectangle, sector, symbols, CornerRadius, Radius, SectorProps};
 use serde_json::Value as Json;
 
 const FIXTURES: &str = include_str!("fixtures/shapes.json");
@@ -106,7 +105,6 @@ fn symbols_match_recharts() {
     let fixtures: Json = serde_json::from_str(FIXTURES).unwrap();
     let cases = fixtures["symbols"].as_array().unwrap();
     let mut failures = Vec::new();
-    let mut stars = 0;
     for (i, case) in cases.iter().enumerate() {
         let props = decode(&case["props"]);
         let r#type = match props.get("type") {
@@ -133,7 +131,6 @@ fn symbols_match_recharts() {
             )),
         };
         match got {
-            Err(PathError::Trigonometry) if r#type.as_deref() == Some("star") => stars += 1,
             Err(error) => failures.push(format!("symbol {i} {props:?}: {error:?}")),
             Ok(got) => {
                 let got = got.map(|p| (p.transform, p.d));
@@ -145,13 +142,67 @@ fn symbols_match_recharts() {
             }
         }
     }
-    println!(
-        "{} symbols: {stars} stars not ported yet (Math.sin, Math.cos)",
-        cases.len()
-    );
     assert!(
         failures.is_empty(),
         "{} of {} symbols differ:\n{}",
+        failures.len(),
+        cases.len(),
+        failures[..failures.len().min(8)].join("\n")
+    );
+}
+
+#[test]
+fn sectors_match_recharts() {
+    let fixtures: Json = serde_json::from_str(FIXTURES).unwrap();
+    let cases = fixtures["sectors"].as_array().unwrap();
+    let mut failures = Vec::new();
+    for (i, case) in cases.iter().enumerate() {
+        let props = decode(&case["props"]);
+        let defaults = SectorProps::default();
+        // resolveDefaultProps fills undefined props.
+        let number_or = |name: &str, default: f64| match props.get(name) {
+            Value::Undefined => default,
+            v => number(&v),
+        };
+        let flag = |name: &str| match props.get(name) {
+            Value::Undefined => false,
+            Value::Bool(b) => b,
+            other => panic!("not a boolean: {other:?}"),
+        };
+        let sector_props = SectorProps {
+            cx: number_or("cx", defaults.cx),
+            cy: number_or("cy", defaults.cy),
+            inner_radius: number_or("innerRadius", defaults.inner_radius),
+            outer_radius: number_or("outerRadius", defaults.outer_radius),
+            start_angle: number_or("startAngle", defaults.start_angle),
+            end_angle: number_or("endAngle", defaults.end_angle),
+            corner_radius: match props.get("cornerRadius") {
+                Value::Undefined => defaults.corner_radius.clone(),
+                Value::Number(n) => CornerRadius::Number(n),
+                Value::String(s) => CornerRadius::Text(s),
+                _ => CornerRadius::Other,
+            },
+            force_corner_radius: flag("forceCornerRadius"),
+            corner_is_external: flag("cornerIsExternal"),
+        };
+        let got = sector(&sector_props);
+        let want = match &case["path"] {
+            Json::Null => None,
+            path => {
+                let path = decode(path);
+                assert_eq!(text(&path.get("class")).as_deref(), Some("recharts-sector"));
+                text(&path.get("d"))
+            }
+        };
+        if got != want {
+            failures.push(format!(
+                "sector {i} {sector_props:?}:\n  port    {got:?}\n  package {want:?}"
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} of {} sectors differ:\n{}",
         failures.len(),
         cases.len(),
         failures[..failures.len().min(8)].join("\n")

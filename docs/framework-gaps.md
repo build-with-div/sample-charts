@@ -121,9 +121,13 @@ in the browser.
   therefore not a reference for anything drawn with `sin` or `cos`
   (`<Sector>`, the star symbol, polar layout). V8's `sin`/`cos` are not
   ported (licence); `crates/js` computes correctly rounded `sin`/`cos` with
-  code of its own (M3d). Remaining gap: re-measured with
-  `tools/chrome/trig_probe.mjs` on 12,046 distinct arguments, the port
-  equals Chrome except on 18 `sin` and 10 `cos` results, the ones Chrome
-  does not round correctly (`crates/js/tests/fixtures/chrome_trig_gaps.json`,
-  checked by `cargo test -p js --test trig`). Fixtures that depend on
-  `sin`/`cos` take Chrome's values, not Node's.
+  code of its own (M3d). Remaining gap: measured with
+  `tools/chrome/trig_probe.mjs` on 15,484 distinct arguments (the probe's
+  12,046 plus the 3,438 the shape fixtures use), the port equals Chrome
+  except on 28 `sin` and 13 `cos` results, the ones Chrome does not round
+  correctly (`crates/js/tests/fixtures/chrome_trig_gaps.json`, checked by
+  `cargo test -p js --test trig`). Fixtures that depend on `sin`/`cos`
+  take Chrome's values, not Node's: `tools/reference/chrome_trig.mjs`
+  substitutes the recorded results while the packages run (M3e). 13 of
+  the gaps are arguments of the `<Sector>` fixtures; none changes a path
+  after Recharts' 4-digit rounding.

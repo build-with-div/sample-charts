@@ -23,6 +23,9 @@
 //!   bundled code (not ported, for its licence); they equal Chromium 147's
 //!   except where Chromium's are not correctly rounded (`tests/trig.rs`).
 //!
+//! - `Math.asin` and `Math.tan` are V8's fdlibm (`fdlibm.rs`), the same in
+//!   Chromium 147 and Node 24.
+//!
 //! The fdlibm constants are written as V8's source writes them, so the port
 //! can be compared line by line; their literals carry more digits than an
 //! `f64` holds, as in C.
@@ -30,8 +33,10 @@
 #![allow(clippy::excessive_precision, clippy::approx_constant)]
 
 mod big;
+mod fdlibm;
 mod trig;
 
+pub use fdlibm::{asin, tan};
 pub use trig::{cos, sin};
 
 /// `Math.max(a, b)`: NaN if either is NaN, and +0 over -0.

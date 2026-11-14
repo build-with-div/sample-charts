@@ -2,11 +2,13 @@
 //! (`symbolsFill`): circle, cross, diamond, square, star, triangle and wye.
 //! Paths are written by a [`Path`] with three digits, `withPath`'s default.
 //!
-//! The star's constants and points come from `Math.sin` and `Math.cos`,
-//! which Chromium 147 computes with V8's bundled glibc code, not ported yet;
-//! drawing one returns [`PathError::Trigonometry`].
+//! The star's constants and points come from `Math.sin` and `Math.cos`
+//! ([`js::math::sin`], [`js::math::cos`]): correctly rounded, so equal to
+//! Chromium 147's except on the arguments Chromium does not round correctly
+//! (`crates/js/tests/fixtures/chrome_trig_gaps.json`; none is a star's).
 
 use crate::path::{Path, PathError};
+use js::math::{cos, sin};
 
 const PI: f64 = std::f64::consts::PI;
 const TAU: f64 = 2.0 * PI;
@@ -64,7 +66,27 @@ fn draw(r#type: SymbolType, context: &mut Path, size: f64) -> Result<(), PathErr
             let x = -w / 2.0;
             context.rect(x, x, w, w);
         }
-        SymbolType::Star => return Err(PathError::Trigonometry),
+        SymbolType::Star => {
+            // d3's literal, which carries more digits than an f64 holds.
+            #[allow(clippy::excessive_precision)]
+            const KA: f64 = 0.89081309152928522810;
+            let kr = sin(PI / 10.0) / sin(7.0 * PI / 10.0);
+            let kx = sin(TAU / 10.0) * kr;
+            let ky = -cos(TAU / 10.0) * kr;
+            let r = sqrt(size * KA);
+            let x = kx * r;
+            let y = ky * r;
+            context.move_to(0.0, -r);
+            context.line_to(x, y);
+            for i in 1..5 {
+                let a = TAU * f64::from(i) / 5.0;
+                let c = cos(a);
+                let s = sin(a);
+                context.line_to(s * r, -c * r);
+                context.line_to(c * x - s * y, s * x + c * y);
+            }
+            context.close_path();
+        }
         SymbolType::Triangle => {
             let sqrt3 = sqrt(3.0);
             let y = -sqrt(size / (sqrt3 * 3.0));

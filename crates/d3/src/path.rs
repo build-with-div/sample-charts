@@ -5,12 +5,10 @@
 //!
 //! The commands d3-shape's line, area and symbol generators issue are
 //! ported: `moveTo`, `lineTo`, `quadraticCurveTo`, `bezierCurveTo`,
-//! `closePath`, `rect` and `arc`. `arc` calls `Math.cos` and `Math.sin`,
-//! which Chromium 147 computes with V8's bundled glibc code, not ported yet
-//! (docs/framework-gaps.md); until then `arc` covers the arcs whose angles
-//! need no trigonometry: those starting at angle 0 that draw a complete
-//! circle, which is what the circle symbol draws. `arcTo` is not ported
-//! (Recharts never reaches it).
+//! `closePath`, `rect` and `arc`, which covers complete circles, what the
+//! circle symbol draws; other arcs and `arcTo` are not ported (Recharts
+//! never draws them). Its `Math.cos` and `Math.sin` are
+//! [`js::math::cos`] and [`js::math::sin`].
 
 use js::{math_round, number_to_string};
 
@@ -25,21 +23,8 @@ const TAU_EPSILON: f64 = TAU - EPSILON;
 pub enum PathError {
     /// `new Error(\`negative radius: ${r}\`)`, with the message.
     NegativeRadius(String),
-    /// The arc needs `Math.cos` or `Math.sin` of an angle whose result
-    /// depends on the implementation.
-    Trigonometry,
-}
-
-/// `[Math.cos(a), Math.sin(a)]` where every implementation gives the same
-/// result: ±0 (cos 1, sin ±0) and NaN.
-fn exact_cos_sin(a: f64) -> Option<(f64, f64)> {
-    if a == 0.0 {
-        Some((1.0, a))
-    } else if a.is_nan() {
-        Some((f64::NAN, f64::NAN))
-    } else {
-        None
-    }
+    /// An arc that is neither empty nor a complete circle: not ported.
+    PartialArc,
 }
 
 /// A path being built (`new Path(digits)`).
@@ -144,8 +129,7 @@ impl Path {
                 number_to_string(r)
             )));
         }
-        let (cos0, sin0) = exact_cos_sin(a0).ok_or(PathError::Trigonometry)?;
-        let (dx, dy) = (r * cos0, r * sin0);
+        let (dx, dy) = (r * js::math::cos(a0), r * js::math::sin(a0));
         let (x0, y0) = (x + dx, y + dy);
         let cw = if ccw { 0.0 } else { 1.0 };
         let mut da = if ccw { a0 - a1 } else { a1 - a0 };
@@ -183,8 +167,7 @@ impl Path {
             (self.x1, self.y1) = (Some(x0), Some(y0));
             Ok(())
         } else if da > EPSILON {
-            // x1 = x + r * Math.cos(a1), y1 = y + r * Math.sin(a1)
-            Err(PathError::Trigonometry)
+            Err(PathError::PartialArc)
         } else {
             Ok(())
         }

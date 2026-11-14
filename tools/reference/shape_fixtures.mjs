@@ -9,23 +9,28 @@
 //
 // Writes crates/d3/tests/fixtures/shape.json, crates/d3/tests/fixtures/stack.json,
 // crates/recharts/tests/fixtures/curve.json and
-// crates/recharts/tests/fixtures/shapes.json (<Rectangle> and <Symbols>
-// rendered with react-dom/server). Values are tagged as in
+// crates/recharts/tests/fixtures/shapes.json (<Rectangle>, <Symbols> and
+// <Sector> rendered with react-dom/server). Values are tagged as in
 // axis_fixtures.mjs: "u" undefined, null, booleans, "n:<String(n)>" numbers,
 // "s:<text>" strings, [..] arrays, {"o": {..}} objects.
 //
 // The line and area generators and the curves Recharts uses only add,
 // multiply and divide, and paths are rounded with Math.round, so the
-// results do not depend on the platform's math library.
+// results do not depend on the platform's math library. The star symbol
+// and <Sector> call Math.sin and Math.cos, which Node 24 computes
+// differently from Chromium 147: chrome_trig.mjs substitutes Chrome's
+// recorded results, before any package loads.
 
 import { register } from "node:module";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { useChromeTrig } from "./chrome_trig.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "..");
 register(pathToFileURL(join(here, "esm-loader.mjs")));
+const recordMissingTrig = useChromeTrig(root);
 
 function enc(v) {
   if (v === undefined) return "u";
@@ -266,6 +271,48 @@ function shapesFixture(React, renderToStaticMarkup, Rectangle, Symbols) {
   return { rectangles, symbols };
 }
 
+// <Sector> rendered by React's server renderer: pie and radial-bar sectors,
+// with and without rounded corners. Drawn after the rectangles and symbols.
+function sectorsFixture(React, renderToStaticMarkup, Sector) {
+  const fraction = () => (chance(0.6) ? Math.round(rand() * 1e4) / 1e4 : 0);
+  const center = () => (chance(0.04) ? pick([-0, NaN, 0.5, 1e6]) : int(0, 600) + fraction());
+  const radius = () => (chance(0.08) ? pick([0, -0, -5, NaN, 0.25, 1000.125]) : int(0, 300) + fraction());
+  const angle = () => {
+    const r = rand();
+    if (r < 0.3) return pick([0, 90, 180, 270, 360, -90, -180, -270, -360, 450, 720, 0.5, -0]);
+    if (r < 0.85) return int(-360, 360) + fraction() * (chance(0.5) ? 1 : 0) + (chance(0.3) ? rand() : 0);
+    return int(-1000, 1000) + rand();
+  };
+  const sectors = [];
+  for (let i = 0; i < 1500; i++) {
+    const props = { cx: center(), cy: center() };
+    const inner = radius();
+    const outer = radius();
+    if (chance(0.3)) props.innerRadius = 0;
+    else props.innerRadius = chance(0.85) ? Math.min(inner, outer) : inner;
+    props.outerRadius = chance(0.85) ? Math.max(inner, outer) : outer;
+    props.startAngle = angle();
+    const r = rand();
+    if (r < 0.05) props.endAngle = props.startAngle;
+    else if (r < 0.15) props.endAngle = props.startAngle + pick([360, -360, 359.999, 359.9995, 180, -180, 400]);
+    else if (r < 0.6) props.endAngle = props.startAngle + (chance(0.5) ? 1 : -1) * (rand() * pick([10, 90, 200, 360]));
+    else props.endAngle = angle();
+    const c = rand();
+    if (c < 0.35) {
+      // no cornerRadius: 0 by default
+    } else if (c < 0.8) props.cornerRadius = pick([0, 1, 2, 4, 5.5, 8, 10, 20, 50, 1000, -3, NaN]);
+    else props.cornerRadius = pick(["10%", "50%", "25.5%", "200%", "5", "abc", "", "-10%"]);
+    if (chance(0.3)) props.forceCornerRadius = chance(0.6);
+    if (chance(0.3)) props.cornerIsExternal = chance(0.6);
+    for (const k of ["innerRadius", "outerRadius", "startAngle", "endAngle"]) {
+      if (chance(0.02)) delete props[k];
+    }
+    const path = renderPath(React, renderToStaticMarkup, Sector, props);
+    sectors.push({ props: enc(props), path: path === null ? null : enc(path) });
+  }
+  return { sectors };
+}
+
 function serialize(content) {
   const lines = ["{"];
   const entries = Object.entries(content);
@@ -290,6 +337,7 @@ const { renderToStaticMarkup } = await import("react-dom/server");
 const es6 = (path) => import(pathToFileURL(join(here, "node_modules", "recharts", "es6", path)).href);
 const { Rectangle } = await es6("shape/Rectangle.js");
 const { Symbols } = await es6("shape/Symbols.js");
+const { Sector } = await es6("shape/Sector.js");
 const pin = JSON.parse(readFileSync(join(here, "package-lock.json"), "utf8")).packages;
 const versions = Object.fromEntries(
   ["recharts", "d3-shape", "d3-path", "victory-vendor", "react", "react-dom"].map((name) => [name, pin[`node_modules/${name}`].version]),
@@ -299,8 +347,14 @@ const files = {
   "crates/d3/tests/fixtures/shape.json": { generator, versions, cases: d3Fixture(d3) },
   "crates/recharts/tests/fixtures/curve.json": { generator, versions, cases: rechartsFixture(getPath) },
   "crates/d3/tests/fixtures/stack.json": { generator, versions, cases: stackFixture(d3) },
-  "crates/recharts/tests/fixtures/shapes.json": { generator, versions, ...shapesFixture(React, renderToStaticMarkup, Rectangle, Symbols) },
+  "crates/recharts/tests/fixtures/shapes.json": {
+    generator,
+    versions,
+    ...shapesFixture(React, renderToStaticMarkup, Rectangle, Symbols),
+    ...sectorsFixture(React, renderToStaticMarkup, Sector),
+  },
 };
+if (recordMissingTrig()) process.exit(1);
 const check = process.argv.includes("--check");
 const stale = [];
 for (const [path, content] of Object.entries(files)) {
@@ -317,7 +371,7 @@ for (const [path, content] of Object.entries(files)) {
   } else {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, text);
-    console.log(`wrote ${path} (${(text.length / 1024).toFixed(0)} KiB, ${(content.cases ?? [...content.rectangles, ...content.symbols]).length} cases)`);
+    console.log(`wrote ${path} (${(text.length / 1024).toFixed(0)} KiB, ${(content.cases ?? [...content.rectangles, ...content.symbols, ...content.sectors]).length} cases)`);
   }
 }
 if (stale.length) {

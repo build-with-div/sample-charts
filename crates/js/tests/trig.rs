@@ -1,12 +1,15 @@
-//! `js::math::sin` and `cos` against Chromium 147: `fixtures/chrome_trig.json`
-//! holds Chrome's `Math.sin` and `Math.cos` on 12,046 arguments
+//! `js::math::sin`, `cos`, `tan` and `asin` against Chromium 147:
+//! `fixtures/chrome_trig.json` holds Chrome's `Math.sin`, `Math.cos` and
+//! `Math.tan` on 15,484 arguments and `Math.asin` on 8,011
 //! (`tools/chrome/trig_probe.mjs`), and `fixtures/chrome_trig_gaps.json` the
-//! results Chrome does not round correctly (`tools/chrome/trig_gaps.py`).
+//! `sin` and `cos` results Chrome does not round correctly
+//! (`tools/chrome/trig_gaps.py`).
 //!
-//! The port computes correctly rounded values, so it must equal Chrome on
+//! `sin` and `cos` are correctly rounded, so they must equal Chrome on
 //! every argument but the recorded gaps, and equal the correctly rounded
-//! value on those. The gaps stay a Chromium-fidelity difference
-//! (`docs/framework-gaps.md`).
+//! value on those; the gaps stay a Chromium-fidelity difference
+//! (`docs/framework-gaps.md`). `tan` and `asin` are V8's fdlibm and must
+//! equal Chrome everywhere.
 
 use std::collections::BTreeSet;
 
@@ -89,4 +92,43 @@ fn star_symbol_arguments_match_chrome() {
     assert_eq!(js::math::sin(7.0 * pi / 10.0), 0.8090169943749475);
     assert_eq!(js::math::cos(2.0 * pi * 3.0 / 5.0), -0.8090169943749476);
     assert_eq!(js::math::sin(2.0 * pi * 3.0 / 5.0), -0.587785252292473);
+}
+
+/// Every result must have Chrome's bits (NaN any NaN).
+fn check_all(name: &str, cases: &[Json], column: usize, f: fn(f64) -> f64) {
+    let mut failures = Vec::new();
+    for case in cases {
+        let x = number(&case[0]);
+        let (got, want) = (f(x), number(&case[column]));
+        if got.to_bits() != want.to_bits() && !(got.is_nan() && want.is_nan()) {
+            failures.push(format!(
+                "Math.{name}({}) = {got:?}, Chrome {want:?}",
+                case[0]
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{} of {} differ:\n{}",
+        failures.len(),
+        cases.len(),
+        failures[..failures.len().min(20)].join("\n")
+    );
+}
+
+#[test]
+fn tan_matches_chrome() {
+    let chrome: Json = serde_json::from_str(CHROME).unwrap();
+    check_all("tan", chrome["cases"].as_array().unwrap(), 3, js::math::tan);
+}
+
+#[test]
+fn asin_matches_chrome() {
+    let chrome: Json = serde_json::from_str(CHROME).unwrap();
+    check_all(
+        "asin",
+        chrome["asin"].as_array().unwrap(),
+        1,
+        js::math::asin,
+    );
 }
