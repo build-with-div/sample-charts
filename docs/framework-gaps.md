@@ -67,3 +67,23 @@ in the browser.
   of ten counts one digit more (`getDigitCount(999.9999999999999)` is 4).
   The port matches both (`crates/recharts/src/decimal.rs`,
   `scale/arithmetic.rs`).
+- Recharts ships two builds that use different d3 code. The browser build
+  (`es6`, what bundlers pick) imports `victory-vendor/d3-scale`, which
+  re-exports npm d3-scale 4.0.3 and d3-array 3.2.5; the CommonJS build
+  (`lib`) uses older copies vendored inside victory-vendor, whose `ticks`
+  computes the step differently and gives other ticks for some domains. The
+  port follows the browser build (`crates/d3`).
+- `scale="implicit"` passes Recharts' scale-name check (`scaleImplicit` is
+  a d3-scale export) but is d3's unknown-value symbol, not a constructor,
+  so building the axis scale throws a TypeError. The port throws it with
+  the message V8 gives for the unminified source, `d3Scales[name] is not a
+  function`; a minifying bundler renames `d3Scales`, which changes it.
+- Chromium's own `Math.pow` depends on the platform: its V8 calls the C
+  library's `pow`. Measured on Windows 11 with Chrome for Testing
+  147.0.7727.50: `Math.pow(10, 23)` is 1.0000000000000001e23, not the
+  correctly rounded 1e23 (Chromium on Linux was not measured). Rust's
+  `f64::powf` on the same
+  machine also rounds 10^126 up where Chrome does not, so the port matches
+  Chromium on 683 of the 684 calls checked. Axis ticks only reach these
+  results for values above about 1e22, which the fixtures avoid;
+  `crates/js/src/math.rs` records the measurement.

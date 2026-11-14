@@ -10,6 +10,8 @@ license = "Apache-2.0"
 # Ported source: recharts@3.8.0 and its dependencies as pinned in
 # tools/reference/package-lock.json. Each module names the file it ports.
 [dependencies]
+d3 = { path = "../d3" }
+js = { path = "../js" }
 num-bigint = "0.4"
 num-traits = "0.2"
 

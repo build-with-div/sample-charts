@@ -8,11 +8,15 @@
 //! `tools/reference` and run to produce the fixtures the tests compare
 //! against exactly.
 //!
-//! What is here so far: the axis tick algorithm (`scale::nice_ticks`) and
-//! the parts of `decimal.js-light` it uses.
+//! What is here so far: the axis tick algorithm (`scale::nice_ticks`) with
+//! the parts of `decimal.js-light` it uses, and the cartesian chart state
+//! with its axis selectors (`chart`): domains, scales and ticks, on the
+//! sample's `d3` port.
 
+pub mod chart;
 pub mod decimal;
-pub mod js;
 pub mod scale;
 
+/// The ECMAScript semantics the port relies on (the sample's `js` crate).
+pub use js;
 pub use js::JsError;

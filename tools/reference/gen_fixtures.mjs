@@ -74,7 +74,10 @@ function pick(list) {
 function value() {
   const exponent = pick([-7, -4, -3, -2, -1, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 5, 6, 9, 12]);
   const digits = pick([1, 1, 2, 2, 3, 4, 6, 17]);
-  let v = Math.round(rand() * 10 ** digits) / 10 ** digits * 10 ** exponent;
+  // 10^n is parsed, not computed: `**` calls the C library's pow, whose
+  // results differ between platforms and Node versions.
+  const pow10 = (n) => Number(`1e${n}`);
+  let v = Math.round(rand() * pow10(digits)) / pow10(digits) * pow10(exponent);
   if (rand() < 0.1) v = v + 0.1 + 0.2;
   if (rand() < 0.3) v = -v;
   return v;
