@@ -229,14 +229,38 @@ pub struct Margin {
     pub left: Option<f64>,
 }
 
-/// `stackOffset` of a chart.
+/// `stackOffset` of a chart: the keys of `STACK_OFFSET_MAP` in
+/// `util/ChartUtils.js`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StackOffset {
+    /// d3's `stackOffsetNone`.
     None,
+    /// d3's `stackOffsetExpand`.
     Expand,
-    /// Other d3 offsets (`silhouette`, `wiggle`, `sign`, `positive`), which
-    /// only matter for stacked series.
+    /// d3's `stackOffsetSilhouette`.
+    Silhouette,
+    /// d3's `stackOffsetWiggle`.
+    Wiggle,
+    /// Recharts' `offsetSign`.
+    Sign,
+    /// Recharts' `offsetPositive`.
+    Positive,
+    /// Any other name, which stacks as `none`.
     Other(String),
+}
+
+impl StackOffset {
+    pub fn from_name(name: &str) -> StackOffset {
+        match name {
+            "none" => StackOffset::None,
+            "expand" => StackOffset::Expand,
+            "silhouette" => StackOffset::Silhouette,
+            "wiggle" => StackOffset::Wiggle,
+            "sign" => StackOffset::Sign,
+            "positive" => StackOffset::Positive,
+            other => StackOffset::Other(other.into()),
+        }
+    }
 }
 
 /// Props of `<BarChart>`, `<LineChart>`, `<AreaChart>` and
@@ -251,6 +275,7 @@ pub struct ChartProps {
     pub data: Option<Vec<Value>>,
     pub bar_category_gap: Option<Value>,
     pub stack_offset: Option<StackOffset>,
+    pub reverse_stack_order: Option<bool>,
 }
 
 impl ChartProps {
@@ -264,6 +289,7 @@ impl ChartProps {
             data: None,
             bar_category_gap: None,
             stack_offset: None,
+            reverse_stack_order: None,
         }
     }
 }

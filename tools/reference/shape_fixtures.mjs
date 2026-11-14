@@ -7,8 +7,8 @@
 //   node shape_fixtures.mjs          # write the fixtures
 //   node shape_fixtures.mjs --check  # fail if the committed fixtures differ
 //
-// Writes crates/d3/tests/fixtures/shape.json and
-// crates/recharts/tests/fixtures/curve.json. Values are tagged as in
+// Writes crates/d3/tests/fixtures/shape.json, crates/d3/tests/fixtures/stack.json
+// and crates/recharts/tests/fixtures/curve.json. Values are tagged as in
 // axis_fixtures.mjs: "u" undefined, null, booleans, "n:<String(n)>" numbers,
 // "s:<text>" strings, [..] arrays, {"o": {..}} objects.
 //
@@ -171,6 +171,41 @@ function rechartsFixture(getPath) {
   return cases;
 }
 
+const OFFSETS = ["stackOffsetNone", "stackOffsetExpand", "stackOffsetSilhouette", "stackOffsetWiggle"];
+
+// d3.stack() with stackOrderNone and each offset Recharts maps, over values
+// a chart could give it after Number(): mostly numbers, some 0, -0, NaN or
+// infinite. Drawn from its own seed so the fixtures above stay as they were.
+function stackFixture(d3) {
+  seed = 0x57ac4;
+  const value = () => {
+    const r = rand();
+    if (r < 0.06) return NaN;
+    if (r < 0.1) return 0;
+    if (r < 0.12) return -0;
+    if (r < 0.14) return pick([Infinity, -Infinity]);
+    if (r < 0.2) return pick([1e7, 123456789.123, 1e-7, 0.1, 0.2, 0.3]) * (chance(0.5) ? -1 : 1);
+    if (r < 0.45) return int(-300, 300);
+    return int(0, 500) + (chance(0.5) ? Math.round(rand() * 1000) / 1000 : 0);
+  };
+  const cases = [];
+  for (let i = 0; i < 1600; i++) {
+    const offset = OFFSETS[i % OFFSETS.length];
+    const n = pick([0, 1, 2, 2, 3, 3, 4, 5, 6]);
+    const m = pick([0, 1, 2, 3, 4, 5, 6, 8, 12]);
+    const keys = Array.from({ length: n }, (_, k) => `k${k}`);
+    const values = keys.map(() => Array.from({ length: m }, value));
+    const data = Array.from({ length: m }, (_, j) => Object.fromEntries(keys.map((k, s) => [k, values[s][j]])));
+    const series = d3.stack().keys(keys).order(d3.stackOrderNone).offset(d3[offset])(data);
+    cases.push({
+      offset,
+      values: enc(values),
+      series: series.map((s) => s.map((point) => [enc(point[0]), enc(point[1])])),
+    });
+  }
+  return cases;
+}
+
 function serialize(content) {
   const lines = ["{"];
   const entries = Object.entries(content);
@@ -198,6 +233,7 @@ const generator = `tools/reference/shape_fixtures.mjs (Node ${process.versions.n
 const files = {
   "crates/d3/tests/fixtures/shape.json": { generator, versions, cases: d3Fixture(d3) },
   "crates/recharts/tests/fixtures/curve.json": { generator, versions, cases: rechartsFixture(getPath) },
+  "crates/d3/tests/fixtures/stack.json": { generator, versions, cases: stackFixture(d3) },
 };
 const check = process.argv.includes("--check");
 const stale = [];

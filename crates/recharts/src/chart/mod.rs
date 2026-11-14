@@ -9,14 +9,15 @@
 //! the components' props; its methods are the selectors.
 //!
 //! Not yet ported, and reported as [`ChartError::Unsupported`] rather than
-//! computed differently: stacked series (d3-shape's stack, milestone M3),
-//! scales other than linear, band and point, and props given as functions.
+//! computed differently: scales other than linear, band and point, and
+//! props given as functions.
 //! Error bars, reference elements, brushes and legends are not modelled, so
 //! a chart here has none.
 
 mod axis;
 mod props;
 mod scale;
+mod stack;
 
 pub use axis::{AxisResult, Tick};
 pub use props::{
@@ -24,6 +25,7 @@ pub use props::{
     ItemKind, ItemProps, ItemSettings, Layout, Margin, Padding, StackOffset,
 };
 pub use scale::{BandPosition, RechartsScale};
+pub use stack::StackGroup;
 
 use js::{JsError, Key, Value};
 
@@ -113,6 +115,7 @@ pub struct CartesianChart {
     data_end_index: usize,
     bar_category_gap: Value,
     stack_offset: StackOffset,
+    reverse_stack_order: bool,
     x_axes: AxisMap,
     y_axes: AxisMap,
     items: Vec<ItemSettings>,
@@ -167,6 +170,7 @@ impl CartesianChart {
                 .clone()
                 .unwrap_or_else(|| "10%".into()),
             stack_offset: chart.stack_offset.clone().unwrap_or(StackOffset::None),
+            reverse_stack_order: chart.reverse_stack_order.unwrap_or(false),
             x_axes: x_map,
             y_axes: y_map,
             items: items.iter().map(ItemSettings::from_props).collect(),
