@@ -2,7 +2,7 @@
 //! uses, wrapped with Recharts' `map`, and how `combineConfiguredScale`
 //! (`state/selectors/combiners/combineConfiguredScale.js`) builds it.
 
-use d3::scale::{Band, Linear};
+use d3::scale::{Band, Linear, Log};
 use js::{JsError, Value};
 
 use super::ChartError;
@@ -65,6 +65,7 @@ pub(crate) fn is_supported_scale_name(name: &str) -> bool {
 #[derive(Debug, Clone, PartialEq)]
 pub enum RechartsScale {
     Linear(Linear),
+    Log(Log),
     Band(Band),
 }
 
@@ -80,8 +81,8 @@ impl RechartsScale {
     /// `combineConfiguredScaleInternal(realScaleType, axisDomain,
     /// axisRange)`: `getD3ScaleFromType(realScaleType)` given
     /// `domain(axisDomain)` and `range(axisRange)`, `None` (`undefined`)
-    /// for a name d3-scale does not export. Linear, band and point scales
-    /// are ported; the other d3 scales are not yet.
+    /// for a name d3-scale does not export. Linear, log, band and point
+    /// scales are ported; the other d3 scales are not yet.
     pub fn configure(
         real_scale_type: &str,
         domain: &[Value],
@@ -99,6 +100,13 @@ impl RechartsScale {
                     .set_domain(domain.iter().map(Value::to_number).collect())
                     .set_range(range.to_vec());
                 Ok(Some(RechartsScale::Linear(scale)))
+            }
+            "scaleLog" => {
+                let mut scale = Log::new();
+                scale
+                    .set_domain(domain.iter().map(Value::to_number).collect())
+                    .set_range(range.to_vec());
+                Ok(Some(RechartsScale::Log(scale)))
             }
             // `scaleImplicit` is d3-scale's unknown-value symbol, not a
             // constructor, so `d3Scales[name]()` throws. The message is the
@@ -120,7 +128,7 @@ impl RechartsScale {
                 Ok(Some(RechartsScale::Band(scale)))
             }
             _ if D3_SCALES.contains(&name.as_str()) => Err(ChartError::Unsupported(
-                "d3 scales other than linear, band and point",
+                "d3 scales other than linear, log, band and point",
             )),
             _ => Ok(None),
         }
@@ -132,6 +140,7 @@ impl RechartsScale {
             RechartsScale::Linear(scale) => {
                 scale.domain().iter().map(|n| Value::Number(*n)).collect()
             }
+            RechartsScale::Log(scale) => scale.domain().iter().map(|n| Value::Number(*n)).collect(),
             RechartsScale::Band(scale) => scale.domain().to_vec(),
         }
     }
@@ -140,6 +149,7 @@ impl RechartsScale {
     pub fn d3_range(&self) -> Vec<f64> {
         match self {
             RechartsScale::Linear(scale) => scale.range().to_vec(),
+            RechartsScale::Log(scale) => scale.range().to_vec(),
             RechartsScale::Band(scale) => scale.range().to_vec(),
         }
     }
@@ -147,15 +157,16 @@ impl RechartsScale {
     /// `scale.bandwidth()`, for band and point scales.
     pub fn bandwidth(&self) -> Option<f64> {
         match self {
-            RechartsScale::Linear(_) => None,
+            RechartsScale::Linear(_) | RechartsScale::Log(_) => None,
             RechartsScale::Band(scale) => Some(scale.bandwidth()),
         }
     }
 
-    /// `scale.ticks(count)`, for linear scales.
+    /// `scale.ticks(count)`, for linear and log scales.
     pub fn ticks(&self, count: f64) -> Option<Result<Vec<f64>, js::JsError>> {
         match self {
             RechartsScale::Linear(scale) => Some(scale.ticks(count)),
+            RechartsScale::Log(scale) => Some(scale.ticks(count)),
             RechartsScale::Band(_) => None,
         }
     }
@@ -174,6 +185,12 @@ impl RechartsScale {
     pub fn map(&self, input: &Value, position: Option<BandPosition>) -> Option<f64> {
         match self {
             RechartsScale::Linear(scale) => {
+                if input.is_nullish() {
+                    return None;
+                }
+                scale.apply(input.to_number())
+            }
+            RechartsScale::Log(scale) => {
                 if input.is_nullish() {
                     return None;
                 }

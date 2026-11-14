@@ -12,7 +12,7 @@ platform features Div must provide for them.
   `Curve`, `Rectangle`, `Symbols` and `Sector`, tested for equality with the npm
   package.
 - [crates/d3](crates/d3): the d3 modules Recharts' browser build uses:
-  d3-array's ticks, d3-scale's linear, band and point scales, d3-path and
+  d3-array's ticks, d3-scale's linear, log, band and point scales, d3-path and
   d3-shape's line and area generators with their curves, the stack layout
   and the symbols.
 - [crates/js](crates/js): the ECMAScript semantics the ports depend on as

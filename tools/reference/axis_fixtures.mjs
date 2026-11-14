@@ -214,7 +214,35 @@ function d3Fixture(d3Array, d3Scale) {
       apply: probes.map((x) => [enc(x), enc(scale(x))]),
     });
   }
-  return { ticks, linear, band };
+  // Log scales (base 10), drawn from their own seed so the cases above and
+  // the charts below keep theirs.
+  const saved = seed;
+  seed = 0x109;
+  const log = [];
+  const magnitude = () => (int(1, 999) / 100) * pow10(int(-6, 9)) * (chance(0.2) ? rand() + 0.5 : 1);
+  for (let i = 0; i < 600; i++) {
+    const n = chance(0.15) ? 3 : 2;
+    let domain = Array.from({ length: n }, magnitude).sort((a, b) => a - b);
+    const r = rand();
+    if (r < 0.2) domain = domain.map((d) => -d).reverse();
+    else if (r < 0.25) domain[0] = pick([0, -0, -1, NaN, -magnitude()]);
+    if (chance(0.3)) domain.reverse();
+    if (chance(0.05)) domain[1] = domain[0];
+    const range = Array.from({ length: chance(0.1) ? 3 : 2 }, () => int(-500, 900) + (chance(0.3) ? rand() : 0));
+    const scale = d3Scale.scaleLog().domain(domain).range(range);
+    const d = scale.domain();
+    const inputs = [...d, Math.sqrt(Math.abs(d[0] * d[d.length - 1])), 0, -1, magnitude(), -magnitude(), NaN, Infinity];
+    const count = pick([undefined, 0, 1, 2, 3, 5, 10, 20, 2.5, NaN]);
+    log.push({
+      domain: enc(domain),
+      range: enc(range),
+      apply: inputs.map((x) => [enc(x), enc(scale(x))]),
+      count: enc(count),
+      ticks: enc(scale.ticks(count)),
+    });
+  }
+  seed = saved;
+  return { ticks, linear, band, log };
 }
 
 // ----------------------------------------------------------- chart fixture
