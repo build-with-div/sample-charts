@@ -7,6 +7,8 @@
 use d3::shape::{area, line, AreaPoint, Curve};
 use js::Value;
 
+use super::upper_first;
+
 /// One point of a curve: `{ x, y }`, where either may be `null` or not a
 /// number (a missing value); only finite numbers are drawn.
 #[derive(Debug, Clone, PartialEq)]
@@ -45,21 +47,6 @@ impl BaseLine {
             ),
             _ => BaseLine::None,
         }
-    }
-}
-
-/// `upperFirst` of `util/DataUtils.js` for a string.
-fn upper_first(value: &str) -> String {
-    let mut chars = value.chars();
-    match chars.next() {
-        Some(first) if (first as u32) < 0x10000 => {
-            format!(
-                "{}{}",
-                first.to_uppercase().collect::<String>(),
-                chars.as_str()
-            )
-        }
-        _ => value.to_owned(),
     }
 }
 

@@ -102,3 +102,18 @@ in the browser.
   domain bound changes. The port computes each axis on its own, and
   `axis_fixtures.mjs` resets the three selectors' last result before every
   axis so the fixtures do the same.
+- Chromium 147 does not compute `Math.sin` and `Math.cos` as Node 24
+  does. Measured on Windows 11, Chrome for Testing 147.0.7727.50
+  (headless) against Node 24.22.3 on the same 13,009 arguments
+  (angles in radians and degrees, small, large and huge values): 397 `sin`
+  and 396 `cos` results differ, among them `Math.cos(2 * Math.PI * 3 / 5)`,
+  which d3's star symbol uses (-0.8090169943749476 in Chrome,
+  -0.8090169943749475 in Node). Chrome's results also differ from the
+  Windows C runtime's (390 `sin`, 399 `cos`) and from the correctly rounded
+  values (150 `sin`, 137 `cos`), so they come from V8's bundled glibc
+  `sin`/`cos`, not from the platform. `Math.tan`, `Math.asin`, `Math.acos`,
+  `Math.atan`, `Math.atan2` and `Math.sqrt` agreed with Node on every
+  argument tried (V8's fdlibm port in both). Node-generated fixtures are
+  therefore not a reference for anything drawn with `sin` or `cos`
+  (`<Sector>`, the star symbol, polar layout); the port reports those as
+  not ported until Chromium's `sin`/`cos` are (M3d).
