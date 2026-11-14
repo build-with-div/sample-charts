@@ -77,7 +77,7 @@ def js_string(v):
 def main():
     cases = json.loads((FIXTURES / "chrome_trig.json").read_text())["cases"]
     gaps = []
-    for x_text, sin_text, cos_text in cases:
+    for x_text, sin_text, cos_text, *_ in cases:
         x = parse(x_text)
         exact = (Decimal(x), Decimal(1)) if x == 0 else sin_cos(x)
         for name, value, chrome_text in (("sin", exact[0], sin_text), ("cos", exact[1], cos_text)):

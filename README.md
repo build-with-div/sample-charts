@@ -9,7 +9,7 @@ platform features Div must provide for them.
   numeric axis tick algorithm with the decimal.js-light arithmetic under it,
   the cartesian axis selectors (domain, nice ticks, range, scale and
   ticks of every axis, stacked series included) and the path data of
-  `Curve`, `Rectangle` and `Symbols`, tested for equality with the npm
+  `Curve`, `Rectangle`, `Symbols` and `Sector`, tested for equality with the npm
   package.
 - [crates/d3](crates/d3): the d3 modules Recharts' browser build uses:
   d3-array's ticks, d3-scale's linear, band and point scales, d3-path and
@@ -17,17 +17,18 @@ platform features Div must provide for them.
   and the symbols.
 - [crates/js](crates/js): the ECMAScript semantics the ports depend on as
   V8 implements them: number parsing and printing, `Math.log10`,
-  `Math.pow`, values and `Map` keys; and correctly rounded `Math.sin` and
-  `Math.cos`, which equal Chromium's except where Chromium's are not
-  correctly rounded.
+  `Math.pow`, `Math.asin`, `Math.tan`, values and `Map` keys; and
+  correctly rounded `Math.sin` and `Math.cos`, which equal Chromium's
+  except where Chromium's are not correctly rounded.
 - [src](src): the app. Its window shows what the port computes; charts
   appear once Div renders inline SVG.
 - [tools/reference](tools/reference): the pinned npm packages, run under
   Node 24 to generate the fixtures the ports are tested against
   (`npm ci --ignore-scripts && npm run fixtures`).
 - [tools/chrome](tools/chrome): probes run in headless Chrome 147 for
-  results Node does not reproduce (`Math.sin`, `Math.cos`), and the check
-  of which are correctly rounded.
+  results Node does not reproduce (`Math.sin`, `Math.cos`), which the
+  fixture generators then use, and the check of which are correctly
+  rounded.
 - [docs/framework-gaps.md](docs/framework-gaps.md): the platform features
   the port has hit that Div lacks.
 - [docs/design.md](docs/design.md): packages → platform features, the Div
