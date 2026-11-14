@@ -12,7 +12,7 @@ name = "sample-charts"
 path = "src/main.rs"
 
 [workspace]
-members = [".", "crates/recharts"]
+members = [".", "crates/js", "crates/d3", "crates/recharts"]
 # The phase 1 probes pin an older Div and keep their own lock.
 exclude = ["docs/probes"]
 
@@ -53,4 +53,10 @@ opt-level = 3
 
 # The ported packages' fixture tests run thousands of cases.
 [profile.dev.package.recharts]
+opt-level = 2
+
+[profile.dev.package.d3]
+opt-level = 2
+
+[profile.dev.package.js]
 opt-level = 2

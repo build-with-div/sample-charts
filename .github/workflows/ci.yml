@@ -111,10 +111,15 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22.18.0"
+          # Node 24's V8 computes Math.pow as Chromium 147's does; Node 22's
+          # does not (docs/design.md, Phase 2 milestones).
+          node-version: "24.22.3"
 
       - name: Install the pinned packages
         run: npm ci --ignore-scripts
 
-      - name: Check the fixtures
+      - name: Check the nice-ticks fixtures
         run: node gen_fixtures.mjs --check
+
+      - name: Check the math, d3 and axis fixtures
+        run: node axis_fixtures.mjs --check

@@ -6,10 +6,11 @@
   "type": "module",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
-    "fixtures": "node gen_fixtures.mjs"
+    "fixtures": "node gen_fixtures.mjs && node axis_fixtures.mjs",
+    "check": "node gen_fixtures.mjs --check && node axis_fixtures.mjs --check"
   },
   "dependencies": {
     "react": "19.3.1",

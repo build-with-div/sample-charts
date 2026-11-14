@@ -312,10 +312,30 @@ tested for equality with the pinned npm packages run under Node
 (`tools/reference`); rendering is compared with the same input rendered by
 the package in pinned Chromium 147, with measured numbers only.
 
+Node is a faithful reference for the ported logic only where its V8 gives
+Chromium 147's results. The one difference that matters so far is
+`Math.pow`: Chromium 147's V8 calls the platform C library's `pow`, while
+Node 22's V8 still used fdlibm's. On the 684 `Math.pow` calls the axis
+fixtures made, Chrome for Testing 147.0.7727.50 (Windows 11, headless)
+differed from Node 22.18.0 on 70, for example `Math.pow(10, -4)`
+(Chrome 0.0001, Node 9.999999999999999e-5); `Math.log10` agreed on all
+1,723 calls. The fixtures are therefore generated with Node 24.22.3 (V8
+13.6.233.17, `node-v24.22.3-win-x64.zip` from nodejs.org, SHA-256
+`e612af99f626ab415ea225af6bce5c971feb448cb5cae250bb1c3fa50c5f7d9f`, checked
+against the release's `SHASUMS256.txt`), whose V8 also calls the C library:
+on the same 684 calls it gave Chromium's result for every one, both for
+`Math.pow` and for `**`. CI checks the fixtures with the same version on
+Linux. The generators build their inputs without `pow` (10^n is parsed from
+`1e<n>`), so the inputs do not depend on the platform; with that, Node 22
+reproduces the nice-tick fixture byte for byte. The port's `Math.pow`
+(`crates/js`) does what Chromium does; the fixtures record every `Math.pow`
+call with its result, and the tests check the port agrees on each.
+
 | # | Content | Runs on Div today | Gaps it reaches |
 | --- | --- | --- | --- |
 | M1 | Workspace pinned to Div `92ea25a0`, CI, app window; Recharts' numeric tick algorithm (`getNiceTickValues`, `getTickValuesFixedDomain`) with decimal.js-light's arithmetic, equal to recharts@3.8.0 on 3,487 generated cases | yes | V1 (no charts drawn) |
-| M2 | d3-scale as Recharts uses it (victory-vendor 37.4.1): linear, band, point, time, log; Recharts' axis domain and tick selection (`'auto'`, `dataMin`/`dataMax`, `allowDataOverflow`, interval and `minTickGap`) | yes | — (text measurement for `minTickGap` is V4/V2) |
+| M2 | d3-array 3.2.5 ticks, d3-scale 4.0.3 linear, band and point scales (the npm modules Recharts' browser build imports through victory-vendor 37.4.1); Recharts' cartesian axis selectors: applied values, domain (`'auto'`, `dataMin`/`dataMax`, `allowDataOverflow`, user domains), nice ticks, range and padding, the configured scale and the axis ticks. Equal to recharts@3.8.0 on all 2,657 axes of 1,204 generated and shadcn charts, except 128 axes needing what is not ported yet (58 time or log scales, 70 stacked series) | yes | — |
+| M2b | d3-scale time and log scales (with d3-time and d3-time-format) for axes; the tick label filter (`interval`, `minTickGap`), which measures text | yes; label filter waits for V4 | V4, V2 (text measurement) |
 | M3 | d3-shape: curves (linear, natural, monotoneX, step, basis), stack and offsets, arcs and pie layout; Recharts' rectangle, sector and curve path strings, equal to the package's `d` attributes | yes | — |
 | M4 | Recharts' cartesian and polar layout producing the SVG element tree as data; DOM-equality harness against the same chart rendered by Recharts in Chromium 147 | partly (tree only) | V1, V2, V4, S1, S2, O1 |
 | M5 | shadcn's HTML parts (`ChartContainer` sizing, `ChartTooltipContent`, `ChartLegendContent`) as Div elements, pixel-compared with Chromium | yes, with cascade limits | S1, S2, S3 |

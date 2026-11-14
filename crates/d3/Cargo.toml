@@ -1,0 +1,17 @@
+[package]
+name = "d3"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.94"
+publish = false
+description = "Port of the d3 modules Recharts uses (d3-array, d3-interpolate, d3-scale) for sample-charts"
+license = "Apache-2.0"
+
+# Ported source: d3-array 3.2.5, d3-interpolate 3.0.2 and d3-scale 4.0.3, as
+# pinned in tools/reference/package-lock.json and imported by Recharts'
+# browser build through victory-vendor 37.4.1. Each module names what it ports.
+[dependencies]
+js = { path = "../js" }
+
+[dev-dependencies]
+serde_json = "1"
