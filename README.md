@@ -17,12 +17,17 @@ platform features Div must provide for them.
   and the symbols.
 - [crates/js](crates/js): the ECMAScript semantics the ports depend on as
   V8 implements them: number parsing and printing, `Math.log10`,
-  `Math.pow`, values and `Map` keys.
+  `Math.pow`, values and `Map` keys; and correctly rounded `Math.sin` and
+  `Math.cos`, which equal Chromium's except where Chromium's are not
+  correctly rounded.
 - [src](src): the app. Its window shows what the port computes; charts
   appear once Div renders inline SVG.
 - [tools/reference](tools/reference): the pinned npm packages, run under
   Node 24 to generate the fixtures the ports are tested against
   (`npm ci --ignore-scripts && npm run fixtures`).
+- [tools/chrome](tools/chrome): probes run in headless Chrome 147 for
+  results Node does not reproduce (`Math.sin`, `Math.cos`), and the check
+  of which are correctly rounded.
 - [docs/framework-gaps.md](docs/framework-gaps.md): the platform features
   the port has hit that Div lacks.
 - [docs/design.md](docs/design.md): packages → platform features, the Div

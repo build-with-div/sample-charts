@@ -119,8 +119,11 @@ in the browser.
   `Math.atan`, `Math.atan2` and `Math.sqrt` agreed with Node on every
   argument tried (V8's fdlibm port in both). Node-generated fixtures are
   therefore not a reference for anything drawn with `sin` or `cos`
-  (`<Sector>`, the star symbol, polar layout); the port reports those as
-  not ported until M3d. V8's `sin`/`cos` are not ported (licence), so M3d
-  computes correctly rounded `sin`/`cos` with code of its own: the 18 `sin`
-  and 10 `cos` arguments above stay a measured Chromium-fidelity gap, and
-  fixtures that depend on `sin`/`cos` take Chrome's values, not Node's.
+  (`<Sector>`, the star symbol, polar layout). V8's `sin`/`cos` are not
+  ported (licence); `crates/js` computes correctly rounded `sin`/`cos` with
+  code of its own (M3d). Remaining gap: re-measured with
+  `tools/chrome/trig_probe.mjs` on 12,046 distinct arguments, the port
+  equals Chrome except on 18 `sin` and 10 `cos` results, the ones Chrome
+  does not round correctly (`crates/js/tests/fixtures/chrome_trig_gaps.json`,
+  checked by `cargo test -p js --test trig`). Fixtures that depend on
+  `sin`/`cos` take Chrome's values, not Node's.
