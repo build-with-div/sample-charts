@@ -19,11 +19,20 @@
 //!   the `ucrtbase.dll` pow Rust links gives 1.0000000000000001e126 and
 //!   Chrome 1e126; both give 1.0000000000000001e23 for n = 23.
 //!
+//! - `Math.sin` and `Math.cos` are correctly rounded (`trig.rs`), not V8's
+//!   bundled code (not ported, for its licence); they equal Chromium 147's
+//!   except where Chromium's are not correctly rounded (`tests/trig.rs`).
+//!
 //! The fdlibm constants are written as V8's source writes them, so the port
 //! can be compared line by line; their literals carry more digits than an
 //! `f64` holds, as in C.
 
 #![allow(clippy::excessive_precision, clippy::approx_constant)]
+
+mod big;
+mod trig;
+
+pub use trig::{cos, sin};
 
 /// `Math.max(a, b)`: NaN if either is NaN, and +0 over -0.
 pub fn max(a: f64, b: f64) -> f64 {

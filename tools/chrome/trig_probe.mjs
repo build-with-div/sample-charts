@@ -1,0 +1,94 @@
+// Records Chromium's Math.sin and Math.cos on a fixed set of arguments:
+// serves a page that evaluates them, loads it in headless Chrome and writes
+// crates/js/tests/fixtures/chrome_trig.json. Then run trig_gaps.py on it to
+// record which results are not the correctly rounded ones.
+//
+//   node tools/chrome/trig_probe.mjs <path to chrome or chrome.exe>
+//
+// The arguments: 6,000 radians in [-2π, 2π]; angles in degrees as Recharts
+// converts them (-RADIAN * angle), 3,000 with two decimals in [-360, 360]
+// and 1,500 whole; 2,000 small and large values (10^-20 to 10^19); 500 huge
+// values (up to 10^299); and the arguments of d3's star symbol. Repeated
+// arguments are recorded once.
+import { spawn } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const chrome = process.argv[2];
+if (!chrome) {
+  console.error("usage: node trig_probe.mjs <chrome executable>");
+  process.exit(2);
+}
+const out = join(dirname(fileURLToPath(import.meta.url)), "../../crates/js/tests/fixtures/chrome_trig.json");
+
+let seed = 0x7419;
+const rand = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32);
+const RADIAN = Math.PI / 180;
+const inputs = [];
+for (let i = 0; i < 6000; i++) inputs.push((rand() * 2 - 1) * 2 * Math.PI);
+for (let i = 0; i < 3000; i++) inputs.push(-RADIAN * (Math.round(rand() * 72000) / 100 - 360));
+for (let i = 0; i < 1500; i++) inputs.push(-RADIAN * Math.round(rand() * 720 - 360));
+for (let i = 0; i < 2000; i++) inputs.push((rand() * 2 - 1) * 10 ** Math.floor(rand() * 40 - 20));
+for (let i = 0; i < 500; i++) inputs.push((rand() * 2 - 1) * 10 ** Math.floor(rand() * 300));
+inputs.push(Math.PI / 10, (7 * Math.PI) / 10, (2 * Math.PI) / 10, 18 * RADIAN, 36 * RADIAN);
+for (const i of [1, 2, 3, 4]) inputs.push((2 * Math.PI * i) / 5);
+
+// String(-0) is "0"; keep the sign.
+const enc = (v) => (Object.is(v, -0) ? "-0" : String(v));
+const args = [...new Set(inputs.map(enc))];
+
+const page = `<!doctype html><script>
+const args = ${JSON.stringify(args)};
+const enc = ${enc};
+const result = {
+  userAgent: navigator.userAgent,
+  sin: args.map((x) => enc(Math.sin(Number(x)))),
+  cos: args.map((x) => enc(Math.cos(Number(x)))),
+};
+fetch("/result", { method: "POST", body: JSON.stringify(result) });
+</script>`;
+
+const profile = mkdtempSync(join(tmpdir(), "trig-probe-"));
+let browser;
+const server = createServer((req, res) => {
+  if (req.method !== "POST") {
+    res.setHeader("content-type", "text/html");
+    res.end(page);
+    return;
+  }
+  let body = "";
+  req.on("data", (chunk) => (body += chunk));
+  req.on("end", () => {
+    res.end("ok");
+    const result = JSON.parse(body);
+    const lines = args.map((x, i) => `  ${JSON.stringify([x, result.sin[i], result.cos[i]])}`);
+    writeFileSync(
+      out,
+      `{\n "browser": ${JSON.stringify(result.userAgent)},\n "cases": [\n${lines.join(",\n")}\n ]\n}\n`,
+    );
+    console.log(`${args.length} arguments from ${result.userAgent}`);
+    browser.kill();
+    server.close();
+  });
+});
+server.listen(0, "127.0.0.1", () => {
+  const url = `http://127.0.0.1:${server.address().port}/`;
+  browser = spawn(chrome, [
+    "--headless=new",
+    "--disable-gpu",
+    "--no-first-run",
+    "--no-default-browser-check",
+    `--user-data-dir=${profile}`,
+    url,
+  ]);
+  browser.on("exit", () => {
+    try {
+      rmSync(profile, { recursive: true, force: true });
+    } catch {
+      // Chrome may still hold files in the profile briefly.
+    }
+  });
+});
