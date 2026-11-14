@@ -1,6 +1,6 @@
 {
   "generator": "tools/reference/shape_fixtures.mjs (Node 24.22.3, V8 13.6.233.17-node.63)",
-  "versions": {"recharts":"3.8.0","d3-shape":"3.2.1","d3-path":"3.1.1","victory-vendor":"37.4.1"},
+  "versions": {"recharts":"3.8.0","d3-shape":"3.2.1","d3-path":"3.1.1","victory-vendor":"37.4.1","react":"19.3.1","react-dom":"19.3.1"},
   "cases": [
     {"input":{"o":{"type":"s:bumpX","points":[{"o":{"x":"n:54","y":"n:542"}},{"o":{"x":"n:73","y":"n:526.03173652592"}},{"o":{"x":"n:74.23469040263444","y":"n:6224049.3"}},{"o":{"x":"n:121.23469040263444","y":"n:596"}}],"baseLine":"n:452.5","layout":"s:centric","connectNulls":false}},"path":"s:M54,542C63.5,542,63.5,526.032,73,526.032C73.617,526.032,73.617,6224049.3,74.235,6224049.3C97.735,6224049.3,97.735,596,121.235,596L121.235,452.5C97.735,452.5,97.735,452.5,74.235,452.5C73.617,452.5,73.617,452.5,73,452.5C63.5,452.5,63.5,452.5,54,452.5Z"},
     {"input":{"o":{"type":"s:bump","points":[],"baseLine":[],"layout":"s:","connectNulls":true}},"path":null},

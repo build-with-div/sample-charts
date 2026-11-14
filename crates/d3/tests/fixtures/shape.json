@@ -1,6 +1,6 @@
 {
   "generator": "tools/reference/shape_fixtures.mjs (Node 24.22.3, V8 13.6.233.17-node.63)",
-  "versions": {"recharts":"3.8.0","d3-shape":"3.2.1","d3-path":"3.1.1","victory-vendor":"37.4.1"},
+  "versions": {"recharts":"3.8.0","d3-shape":"3.2.1","d3-path":"3.1.1","victory-vendor":"37.4.1","react":"19.3.1","react-dom":"19.3.1"},
   "cases": [
     {"kind":"line","curve":"curveBasis","digits":"n:6","hasX1":false,"hasY1":false,"points":[["n:242.05046955652","n:-0","n:146","n:-0"],null,["n:-25.999976149026537","n:-0","n:469.18818626","n:89964.251884475"]],"path":"s:M242.05047,0ZM-25.999976,0Z"},
     {"kind":"line","curve":"curveBasisClosed","digits":"n:3","hasX1":false,"hasY1":false,"points":[],"path":null},
