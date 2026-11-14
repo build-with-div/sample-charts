@@ -123,3 +123,6 @@ jobs:
 
       - name: Check the math, d3 and axis fixtures
         run: node axis_fixtures.mjs --check
+
+      - name: Check the d3-shape and curve fixtures
+        run: node shape_fixtures.mjs --check

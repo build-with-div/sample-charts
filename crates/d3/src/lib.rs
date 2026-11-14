@@ -20,4 +20,6 @@
 
 pub mod array;
 pub mod interpolate;
+pub mod path;
 pub mod scale;
+pub mod shape;

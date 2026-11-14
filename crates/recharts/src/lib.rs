@@ -11,11 +11,12 @@
 //! What is here so far: the axis tick algorithm (`scale::nice_ticks`) with
 //! the parts of `decimal.js-light` it uses, and the cartesian chart state
 //! with its axis selectors (`chart`): domains, scales and ticks, on the
-//! sample's `d3` port.
+//! sample's `d3` port; and the path data of the `Curve` shape (`shape`).
 
 pub mod chart;
 pub mod decimal;
 pub mod scale;
+pub mod shape;
 
 /// The ECMAScript semantics the port relies on (the sample's `js` crate).
 pub use js;
