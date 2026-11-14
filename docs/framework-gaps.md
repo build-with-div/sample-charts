@@ -109,9 +109,12 @@ in the browser.
   and 396 `cos` results differ, among them `Math.cos(2 * Math.PI * 3 / 5)`,
   which d3's star symbol uses (-0.8090169943749476 in Chrome,
   -0.8090169943749475 in Node). Chrome's results also differ from the
-  Windows C runtime's (390 `sin`, 399 `cos`) and from the correctly rounded
-  values (150 `sin`, 137 `cos`), so they come from V8's bundled glibc
-  `sin`/`cos`, not from the platform. `Math.tan`, `Math.asin`, `Math.acos`,
+  Windows C runtime's (390 `sin`, 399 `cos`), so they come from V8's
+  bundled `sin`/`cos`, not from the platform. They are the correctly
+  rounded values on all but 23 `sin` and 10 `cos` arguments, each a near
+  tie (the exact value within 0.013 ULP of halfway between two doubles)
+  that Chrome rounds 1 ULP the other way; among them `Math.sin` of -342°
+  and 342° in radians. `Math.tan`, `Math.asin`, `Math.acos`,
   `Math.atan`, `Math.atan2` and `Math.sqrt` agreed with Node on every
   argument tried (V8's fdlibm port in both). Node-generated fixtures are
   therefore not a reference for anything drawn with `sin` or `cos`
