@@ -87,3 +87,18 @@ in the browser.
   Chromium on 683 of the 684 calls checked. Axis ticks only reach these
   results for values above about 1e22, which the fixtures avoid;
   `crates/js/src/math.rs` records the measurement.
+- Recharts memoizes `selectNumericalDomain`, `selectDomainOfStackGroups`
+  and the data-domain selector under them with `numberDomainEqualityCheck`
+  (reselect 5.1.1's `resultEqualityCheck`): when a new domain is `===`
+  equal to the selector's previous result, the previous array is returned
+  instead. `0 === -0`, so an axis whose domain starts at `-0` can come back
+  with `0` (or the reverse) depending on which axis the page selected
+  before it, and reselect keeps that previous result in a `WeakRef`, so
+  also on garbage collection. Found in the fixture generator and replayed
+  in Node 24.22.3: in one generated chart, selecting the X axis first
+  (`selectNumericalDomain` gives `[-0, 648514000000]`) makes the Y axis
+  return that array, where the Y axis selected alone gives
+  `[0, 648514000000]`. Only the sign of a zero
+  domain bound changes. The port computes each axis on its own, and
+  `axis_fixtures.mjs` resets the three selectors' last result before every
+  axis so the fixtures do the same.

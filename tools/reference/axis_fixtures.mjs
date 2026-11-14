@@ -353,6 +353,41 @@ function chartCase(index) {
   return { index, chart, xAxes, yAxes, items };
 }
 
+// Charts with stacked series: every stack offset, reversed stack order,
+// ranged values, items with their own data, several stacks per axis. They
+// draw from their own seed so the cases above stay as they were.
+function stackCases() {
+  const saved = seed;
+  seed = 0x57ac4;
+  const cases = Array.from({ length: 400 }, (_, i) => stackCase(`stack-${i}`));
+  seed = saved;
+  return cases;
+}
+
+function stackCase(index) {
+  const c = chartCase(index);
+  if (c.chart.chartName === "LineChart") c.chart.chartName = pick(["AreaChart", "BarChart"]);
+  const kinds = { BarChart: ["bar"], AreaChart: ["area"], ComposedChart: ["bar", "area", "area", "line"] }[c.chart.chartName];
+  const offset = pick([undefined, "none", "expand", "silhouette", "wiggle", "sign", "positive", "unknown"]);
+  if (offset === undefined) delete c.chart.stackOffset;
+  else c.chart.stackOffset = offset;
+  if (chance(0.3)) c.chart.reverseStackOrder = chance(0.8);
+  if (!c.chart.data && chance(0.8)) c.chart.data = chartData(int(1, 8));
+  const xIds = [0, ...c.xAxes.map((p) => p.xAxisId).filter((id) => id !== undefined && id !== 0)];
+  const yIds = [0, ...c.yAxes.map((p) => p.yAxisId).filter((id) => id !== undefined && id !== 0)];
+  c.items = Array.from({ length: int(1, 5) }, (_, j) => {
+    const item = { kind: pick(kinds), id: chance(0.05) ? String(j) : `item-${j}` };
+    if (!chance(0.05)) item.dataKey = pick(valueKeys);
+    if (chance(0.08)) item.hide = true;
+    if (xIds.length > 1 && chance(0.3)) item.xAxisId = pick(xIds);
+    if (yIds.length > 1 && chance(0.3)) item.yAxisId = pick(yIds);
+    if (item.kind !== "line" && chance(0.85)) item.stackId = pick(["a", "a", "b", 1, 0, "2"]);
+    if (item.kind === "area" && chance(0.15)) item.data = chartData(int(0, 6));
+    return item;
+  });
+  return c;
+}
+
 // The shadcn chart examples of docs/design.md, as they mount.
 function shadcnCases() {
   const barData = [
@@ -480,7 +515,29 @@ async function runCharts(cases) {
     return { ...base, data: p.data };
   }
 
+  // Recharts memoizes three domain selectors with numberDomainEqualityCheck:
+  // a result === equal to the selector's previous one (0 and -0 alike) is
+  // replaced by that previous array, which reselect holds in a WeakRef. A
+  // domain's zero sign would then depend on which axis was selected before
+  // it and on garbage collection. Resetting each selector's last result to
+  // undefined (by running its result function once on inputs that give
+  // undefined) makes every axis read as if it were selected first.
+  const numerical = ax.selectNumericalDomain;
+  if (numerical.dependencies.length !== 8 || numerical.dependencies[3] !== ax.selectDomainOfStackGroups) {
+    throw new Error("selectNumericalDomain's inputs changed");
+  }
+  const dataDomain = numerical.dependencies[4];
+  function forgetLastDomains() {
+    const results = [
+      dataDomain.memoizedResultFunc([], {}, [], {}, "xAxis"),
+      ax.selectDomainOfStackGroups.memoizedResultFunc({}, { dataStartIndex: 0, dataEndIndex: 0 }, "xAxis", undefined),
+      numerical.memoizedResultFunc({ allowDataOverflow: false }, [0, "auto"], undefined, undefined, undefined, undefined, "horizontal", "xAxis"),
+    ];
+    if (results.some((r) => r !== undefined)) throw new Error("could not reset the memoized domains");
+  }
+
   function axisResult(state, axisType, id) {
+    forgetLastDomains();
     const call = (selector) => selector(state, axisType, id, false);
     const applied = call(ax.selectAllAppliedValues).map((v) => v.value);
     const out = {
@@ -492,6 +549,12 @@ async function runCharts(cases) {
       checkedDomain: enc(call(ax.selectCheckedAxisDomain)),
       range: enc(call(ax.selectAxisRange)),
       rangeWithReverse: enc(call(ax.selectAxisRangeWithReverse)),
+      // [stackId, item ids, stackedData as [y0, y1] per series and datum]
+      stackGroups: Object.entries(call(ax.selectStackGroups)).map(([stackId, g]) => [
+        enc(stackId),
+        g.graphicalItems.map((item) => enc(item.id)),
+        g.stackedData.map((series) => series.map((point) => [enc(point[0]), enc(point[1])])),
+      ]),
     };
     const scale = call(ax.selectAxisScale);
     out.scale =
@@ -608,7 +671,7 @@ function runWorker(cases, d3) {
 
 async function main() {
   const check = process.argv.includes("--check");
-  const cases = [...shadcnCases(), ...Array.from({ length: 1200 }, (_, i) => chartCase(i))];
+  const cases = [...shadcnCases(), ...Array.from({ length: 1200 }, (_, i) => chartCase(i)), ...stackCases()];
   const charts = [];
   const powCalls = new Map();
   const log10Calls = new Map();

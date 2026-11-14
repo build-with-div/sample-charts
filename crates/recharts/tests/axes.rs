@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use js::{Key, Value};
 use recharts::chart::{
     AxisDomainType, AxisProps, AxisResult, AxisType, CartesianChart, ChartError, ChartProps,
-    DataKey, ItemKind, ItemProps, Layout, Margin, Padding, StackOffset,
+    DataKey, ItemKind, ItemProps, Layout, Margin, Padding, StackGroup, StackOffset,
 };
 use serde_json::Value as Json;
 
@@ -138,13 +138,8 @@ fn chart_props(value: &Value) -> ChartProps {
             }
             "data" => chart.data = Some(list(v)),
             "barCategoryGap" => chart.bar_category_gap = Some(v.clone()),
-            "stackOffset" => {
-                chart.stack_offset = Some(match string(v).as_str() {
-                    "none" => StackOffset::None,
-                    "expand" => StackOffset::Expand,
-                    other => StackOffset::Other(other.into()),
-                })
-            }
+            "stackOffset" => chart.stack_offset = Some(StackOffset::from_name(&string(v))),
+            "reverseStackOrder" => chart.reverse_stack_order = Some(boolean(v)),
             other => panic!("chart prop {other}"),
         }
     }
@@ -297,18 +292,32 @@ fn result_fields(result: &AxisResult) -> Vec<(&'static str, Value)> {
     ]
 }
 
+/// `selectStackGroups` in the fixture's shape: `[stackId, item ids,
+/// stackedData]` per stack.
+fn stack_groups(groups: &[StackGroup]) -> Value {
+    Value::Array(
+        groups
+            .iter()
+            .map(|g| {
+                Value::Array(vec![
+                    Value::String(g.stack_id.clone()),
+                    Value::Array(g.items.iter().map(|id| Value::String(id.clone())).collect()),
+                    Value::Array(
+                        g.stacked_data
+                            .iter()
+                            .map(|s| Value::Array(s.iter().map(|p| numbers(p)).collect()))
+                            .collect(),
+                    ),
+                ])
+            })
+            .collect(),
+    )
+}
+
 /// Why the package's result shows a case needs what the port reports as
 /// not ported yet; `None` when it does not.
-fn unsupported_is_expected(
-    reason: &str,
-    want: &Json,
-    items: &[ItemProps],
-    applied: Option<&Value>,
-) -> bool {
+fn unsupported_is_expected(reason: &str, want: &Json, applied: Option<&Value>) -> bool {
     match reason {
-        "stacked series (milestone M3)" => items.iter().any(|i| {
-            i.kind != ItemKind::Line && i.stack_id.as_ref().is_some_and(|s| !s.is_nullish())
-        }),
         "d3 scales other than linear, band and point" => match want.get("realScaleType") {
             Some(t) => !matches!(
                 decode(t),
@@ -359,7 +368,7 @@ fn axes_match_recharts() {
             match (store.axis(axis_type, &id), want.get("error")) {
                 (Err(ChartError::Unsupported(reason)), _) => {
                     let applied = want.get("appliedValues").map(decode);
-                    if unsupported_is_expected(reason, want, &items, applied.as_ref()) {
+                    if unsupported_is_expected(reason, want, applied.as_ref()) {
                         *unsupported.entry(reason).or_default() += 1;
                     } else {
                         failures.push(format!(
@@ -386,6 +395,13 @@ fn axes_match_recharts() {
                     failures.push(format!("{label}: does not throw, package throws {message}"));
                 }
                 (Ok(result), None) => {
+                    let groups = stack_groups(&store.stack_groups(axis_type, &id));
+                    if !same(&groups, &decode(&want["stackGroups"])) {
+                        failures.push(format!(
+                            "{label} stackGroups: {groups:?}, package {:?}",
+                            decode(&want["stackGroups"])
+                        ));
+                    }
                     for (field, got) in result_fields(&result) {
                         // `scale` is written as a plain object of tagged fields.
                         let expected = match (field, &want[field]) {

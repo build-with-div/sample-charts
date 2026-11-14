@@ -288,7 +288,7 @@ struct Offset {
 
 impl CartesianChart {
     /// `selectBaseAxis`.
-    fn base_axis(&self, axis_type: AxisType, id: &Key) -> AxisSettings {
+    pub(super) fn base_axis(&self, axis_type: AxisType, id: &Key) -> AxisSettings {
         let axes = match axis_type {
             AxisType::XAxis => &self.x_axes,
             AxisType::YAxis => &self.y_axes,
@@ -304,7 +304,7 @@ impl CartesianChart {
     }
 
     /// `selectCartesianItemsSettings`.
-    fn axis_items(
+    pub(super) fn axis_items(
         &self,
         axis_type: AxisType,
         id: &Key,
@@ -479,12 +479,12 @@ impl CartesianChart {
             (self.layout, axis_type),
             (Layout::Vertical, AxisType::XAxis) | (Layout::Horizontal, AxisType::YAxis)
         );
-        let stacked = items
-            .iter()
-            .any(|item| matches!(item.kind, ItemKind::Area | ItemKind::Bar) && item.is_stacked());
-        if include_stacks && stacked {
-            return Err(ChartError::Unsupported("stacked series (milestone M3)"));
-        }
+        // selectDomainOfStackGroups
+        let stacks = if include_stacks {
+            self.domain_of_stack_groups(&self.stack_groups_of(items))
+        } else {
+            None
+        };
         // selectDomainOfAllAppliedNumericalValuesIncludingErrorValues, with
         // the items that are not stacked and no error bars.
         let not_stacked: Vec<&&ItemSettings> = items
@@ -517,7 +517,7 @@ impl CartesianChart {
             (Some(l), Some(u)) if l.is_finite() && u.is_finite() => Some([l, u]),
             _ => None,
         };
-        let merged = merge_domains(&[data_domain]);
+        let merged = merge_domains(&[stacks, data_domain]);
         Ok(parse_numerical_user_domain(
             &definition,
             merged,
