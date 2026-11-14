@@ -48,7 +48,12 @@ fn interpolate(interpolator: Interpolator, a: Option<f64>, b: Option<f64>, t: f6
 }
 
 /// `bimap` or `polymap` of `continuous.js`, applied to `x`.
-fn piecewise(domain: &[f64], range: &[f64], interpolator: Interpolator, x: f64) -> Option<f64> {
+pub(super) fn piecewise(
+    domain: &[f64],
+    range: &[f64],
+    interpolator: Interpolator,
+    x: f64,
+) -> Option<f64> {
     let n = domain.len().min(range.len());
     if n > 2 {
         let j = n - 1;

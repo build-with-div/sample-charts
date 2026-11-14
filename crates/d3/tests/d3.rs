@@ -313,3 +313,38 @@ fn recorded_math_calls_agree_with_the_port() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+#[test]
+fn log_scales_match_d3_scale() {
+    let fixtures: Json = serde_json::from_str(FIXTURES).unwrap();
+    let cases = fixtures["log"].as_array().unwrap();
+    let mut failures = Vec::new();
+    for (i, case) in cases.iter().enumerate() {
+        let mut scale = d3::scale::Log::new();
+        scale
+            .set_domain(numbers(&case["domain"]))
+            .set_range(numbers(&case["range"]));
+        for pair in case["apply"].as_array().unwrap() {
+            let x = number(&pair[0]);
+            let got = opt(scale.apply(x));
+            let want = decode(&pair[1]);
+            if !same(&got, &want) {
+                failures.push(format!("log {i} scale({x:?}) = {got:?}, d3 {want:?}"));
+            }
+        }
+        // `count == null ? 10 : +count`
+        let count = match decode(&case["count"]) {
+            Value::Undefined => 10.0,
+            v => v.to_number(),
+        };
+        let got = Ok(list(&scale.ticks(count).unwrap()));
+        let want = Ok(decode(&case["ticks"]));
+        if !same_result(&got, &want) {
+            failures.push(format!(
+                "log {i} {:?} ticks({count}) = {got:?}, d3 {want:?}",
+                scale.domain()
+            ));
+        }
+    }
+    finish("log scales", cases.len(), failures);
+}

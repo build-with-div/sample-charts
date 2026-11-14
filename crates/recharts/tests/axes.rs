@@ -318,10 +318,10 @@ fn stack_groups(groups: &[StackGroup]) -> Value {
 /// not ported yet; `None` when it does not.
 fn unsupported_is_expected(reason: &str, want: &Json, applied: Option<&Value>) -> bool {
     match reason {
-        "d3 scales other than linear, band and point" => match want.get("realScaleType") {
+        "d3 scales other than linear, log, band and point" => match want.get("realScaleType") {
             Some(t) => !matches!(
                 decode(t),
-                Value::String(ref s) if s == "linear" || s == "band" || s == "point"
+                Value::String(ref s) if s == "linear" || s == "log" || s == "band" || s == "point"
             ),
             None => false,
         },
