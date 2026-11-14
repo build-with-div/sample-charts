@@ -1,6 +1,6 @@
 {
   "generator": "tools/reference/shape_fixtures.mjs (Node 24.22.3, V8 13.6.233.17-node.63)",
-  "versions": {"recharts":"3.8.0","d3-shape":"3.2.1","d3-path":"3.1.1","victory-vendor":"37.4.1"},
+  "versions": {"recharts":"3.8.0","d3-shape":"3.2.1","d3-path":"3.1.1","victory-vendor":"37.4.1","react":"19.3.1","react-dom":"19.3.1"},
   "cases": [
     {"offset":"stackOffsetNone","values":[["n:NaN","n:375","n:-1e-7","n:153.299","n:267","n:NaN"],["n:433.698","n:228","n:104","n:80.445","n:0.3","n:284"]],"series":[[["n:0","n:NaN"],["n:0","n:375"],["n:0","n:-1e-7"],["n:0","n:153.299"],["n:0","n:267"],["n:0","n:NaN"]],[["n:0","n:433.698"],["n:375","n:603"],["n:-1e-7","n:103.9999999"],["n:153.299","n:233.744"],["n:267","n:267.3"],["n:0","n:284"]]]},
     {"offset":"stackOffsetExpand","values":[["n:-1e-7"]],"series":[[["n:0","n:1"]]]},

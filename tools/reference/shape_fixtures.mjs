@@ -7,8 +7,10 @@
 //   node shape_fixtures.mjs          # write the fixtures
 //   node shape_fixtures.mjs --check  # fail if the committed fixtures differ
 //
-// Writes crates/d3/tests/fixtures/shape.json, crates/d3/tests/fixtures/stack.json
-// and crates/recharts/tests/fixtures/curve.json. Values are tagged as in
+// Writes crates/d3/tests/fixtures/shape.json, crates/d3/tests/fixtures/stack.json,
+// crates/recharts/tests/fixtures/curve.json and
+// crates/recharts/tests/fixtures/shapes.json (<Rectangle> and <Symbols>
+// rendered with react-dom/server). Values are tagged as in
 // axis_fixtures.mjs: "u" undefined, null, booleans, "n:<String(n)>" numbers,
 // "s:<text>" strings, [..] arrays, {"o": {..}} objects.
 //
@@ -206,6 +208,64 @@ function stackFixture(d3) {
   return cases;
 }
 
+// What a component renders, as server rendering writes it: null for
+// nothing, else the attributes of its single <path>.
+function renderPath(React, renderToStaticMarkup, component, props) {
+  const html = renderToStaticMarkup(React.createElement(component, props));
+  if (html === "") return null;
+  const match = /^<path((?: [a-zA-Z-]+="[^"]*")*)(?:\/>|><\/path>)$/.exec(html);
+  if (!match) throw new Error(`unexpected markup ${html}`);
+  const unescape = (s) =>
+    s.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  return Object.fromEntries([...match[1].matchAll(/ ([a-zA-Z-]+)="([^"]*)"/g)].map(([, k, v]) => [k, unescape(v)]));
+}
+
+// <Rectangle> and <Symbols> rendered by React's server renderer, as the
+// browser build defines them. Drawn from their own seed.
+function shapesFixture(React, renderToStaticMarkup, Rectangle, Symbols) {
+  seed = 0x5a9e5;
+  const position = () =>
+    chance(0.06) ? pick([-0, NaN, 1e7, 0.00005, 0.12345678, Infinity]) : int(-50, 800) + (chance(0.5) ? Math.round(rand() * 1e4) / 1e4 : 0);
+  const side = () =>
+    chance(0.12)
+      ? pick([0, -0, NaN, 0.00004, 0.00006, 1e-9, Infinity, 123456.789])
+      : (chance(0.2) ? -1 : 1) * (int(0, 400) + (chance(0.5) ? Math.round(rand() * 1e6) / 1e6 : 0));
+  const corner = () => pick([0, 4, 8.25, 100, null, undefined, -2, NaN, 3, 6]);
+  const rectangles = [];
+  for (let i = 0; i < 1500; i++) {
+    const props = { x: position(), y: position(), width: side(), height: side() };
+    const r = rand();
+    if (r < 0.2) props.radius = undefined;
+    else if (r < 0.5) props.radius = pick([0, 4, 8, 0.5, 100, -3, NaN, Infinity, 2.123456]);
+    else if (r < 0.95) props.radius = Array.from({ length: chance(0.85) ? 4 : int(0, 5) }, corner);
+    else props.radius = "5";
+    if (props.radius === undefined) delete props.radius;
+    const path = renderPath(React, renderToStaticMarkup, Rectangle, props);
+    rectangles.push({ props: enc(props), d: path === null ? null : enc(path.d) });
+  }
+  const symbols = [];
+  const types = ["circle", "cross", "diamond", "square", "star", "triangle", "wye", "Cross", "", "unknown", "SQUARE", 5, undefined];
+  for (let i = 0; i < 800; i++) {
+    const props = {};
+    const type = pick(types);
+    if (type !== undefined) props.type = type;
+    const size = pick([undefined, undefined, 0, 1, 64, 100.5, 1e6, -4, NaN, 30, 12.25]);
+    if (size !== undefined) props.size = size;
+    const sizeType = pick([undefined, undefined, "area", "diameter", "foo"]);
+    if (sizeType !== undefined) props.sizeType = sizeType;
+    for (const k of ["cx", "cy"]) {
+      const v = chance(0.05) ? pick([undefined, NaN]) : position();
+      if (v !== undefined) props[k] = v;
+    }
+    const path = renderPath(React, renderToStaticMarkup, Symbols, props);
+    symbols.push({
+      props: enc(props),
+      path: path === null ? null : { transform: enc(path.transform), d: enc(path.d) },
+    });
+  }
+  return { rectangles, symbols };
+}
+
 function serialize(content) {
   const lines = ["{"];
   const entries = Object.entries(content);
@@ -225,15 +285,21 @@ function serialize(content) {
 
 const d3 = await import("victory-vendor/d3-shape");
 const { getPath } = await import(pathToFileURL(join(here, "node_modules", "recharts", "es6", "shape", "Curve.js")).href);
+const React = await import("react");
+const { renderToStaticMarkup } = await import("react-dom/server");
+const es6 = (path) => import(pathToFileURL(join(here, "node_modules", "recharts", "es6", path)).href);
+const { Rectangle } = await es6("shape/Rectangle.js");
+const { Symbols } = await es6("shape/Symbols.js");
 const pin = JSON.parse(readFileSync(join(here, "package-lock.json"), "utf8")).packages;
 const versions = Object.fromEntries(
-  ["recharts", "d3-shape", "d3-path", "victory-vendor"].map((name) => [name, pin[`node_modules/${name}`].version]),
+  ["recharts", "d3-shape", "d3-path", "victory-vendor", "react", "react-dom"].map((name) => [name, pin[`node_modules/${name}`].version]),
 );
 const generator = `tools/reference/shape_fixtures.mjs (Node ${process.versions.node}, V8 ${process.versions.v8})`;
 const files = {
   "crates/d3/tests/fixtures/shape.json": { generator, versions, cases: d3Fixture(d3) },
   "crates/recharts/tests/fixtures/curve.json": { generator, versions, cases: rechartsFixture(getPath) },
   "crates/d3/tests/fixtures/stack.json": { generator, versions, cases: stackFixture(d3) },
+  "crates/recharts/tests/fixtures/shapes.json": { generator, versions, ...shapesFixture(React, renderToStaticMarkup, Rectangle, Symbols) },
 };
 const check = process.argv.includes("--check");
 const stale = [];
@@ -251,7 +317,7 @@ for (const [path, content] of Object.entries(files)) {
   } else {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, text);
-    console.log(`wrote ${path} (${(text.length / 1024).toFixed(0)} KiB, ${content.cases.length} cases)`);
+    console.log(`wrote ${path} (${(text.length / 1024).toFixed(0)} KiB, ${(content.cases ?? [...content.rectangles, ...content.symbols]).length} cases)`);
   }
 }
 if (stale.length) {
