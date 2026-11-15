@@ -452,6 +452,44 @@ function stackCase(index) {
   return c;
 }
 
+// Bar charts with bar sizes, gaps, maximum sizes and minimum point sizes,
+// for the bar geometry (selectBarRectangles). Their own seed keeps the
+// cases above as they were.
+function barCases() {
+  const saved = seed;
+  seed = 0xba12;
+  const cases = Array.from({ length: 400 }, (_, i) => barCase(`bar-${i}`));
+  seed = saved;
+  return cases;
+}
+
+function barCase(index) {
+  const c = chartCase(index);
+  c.chart.chartName = chance(0.8) ? "BarChart" : "ComposedChart";
+  if (!c.chart.data && chance(0.8)) c.chart.data = chartData(int(1, 12));
+  if (chance(0.3)) c.chart.barSize = pick([10, 24, 0, 1000, "20%", "50%", "x"]);
+  if (chance(0.3)) c.chart.barGap = pick([0, 2, 8, "10%", "50%", -4, "y"]);
+  if (chance(0.25)) c.chart.maxBarSize = pick([5, 20, 60, 0, -1]);
+  if (chance(0.2)) c.chart.barCategoryGap = pick(["20%", 4, "0%", 0, "60%", 100]);
+  const xIds = [0, ...c.xAxes.map((p) => p.xAxisId).filter((id) => id !== undefined && id !== 0)];
+  const yIds = [0, ...c.yAxes.map((p) => p.yAxisId).filter((id) => id !== undefined && id !== 0)];
+  c.items = Array.from({ length: int(1, 5) }, (_, j) => {
+    const item = { kind: c.chart.chartName === "BarChart" || chance(0.7) ? "bar" : pick(["line", "area"]), id: `item-${j}` };
+    if (!chance(0.05)) item.dataKey = pick(["a", "b", "a", "b", "r", "x", "nested.v", "missing"]);
+    if (chance(0.08)) item.hide = true;
+    if (xIds.length > 1 && chance(0.3)) item.xAxisId = pick(xIds);
+    if (yIds.length > 1 && chance(0.3)) item.yAxisId = pick(yIds);
+    if (item.kind !== "line" && chance(0.35)) item.stackId = pick(["a", "a", "b", 1]);
+    if (item.kind === "bar") {
+      if (chance(0.25)) item.barSize = pick([8, 16, 30, "30%", 0, 500]);
+      if (chance(0.2)) item.maxBarSize = pick([4, 12, 40, 0]);
+      if (chance(0.25)) item.minPointSize = pick([2, 5, 10, -3, 0]);
+    }
+    return item;
+  });
+  return c;
+}
+
 // The shadcn chart examples of docs/design.md, as they mount.
 function shadcnCases() {
   const barData = [
@@ -518,6 +556,7 @@ async function runCharts(cases) {
   const es6 = (path) => import(pathToFileURL(join(here, "node_modules", "recharts", "es6", path)).href);
   const { createRechartsStore } = await es6("state/store.js");
   const ax = await es6("state/selectors/axisSelectors.js");
+  const bs = await es6("state/selectors/barSelectors.js");
   const { addXAxis, addYAxis } = await es6("state/cartesianAxisSlice.js");
   const { setChartData } = await es6("state/chartDataSlice.js");
   const { setChartSize, setLayout, setMargin } = await es6("state/layoutSlice.js");
@@ -574,7 +613,17 @@ async function runCharts(cases) {
   function itemSettings(item) {
     const p = { xAxisId: 0, yAxisId: 0, hide: false, ...Object.fromEntries(Object.entries(item).filter(([, v]) => v !== undefined)) };
     const base = { type: item.kind, id: item.id, xAxisId: p.xAxisId, yAxisId: p.yAxisId, zAxisId: 0, dataKey: p.dataKey, hide: p.hide, isPanorama: false };
-    if (item.kind === "bar") return { ...base, data: undefined, stackId: p.stackId == null ? undefined : getNormalizedStackId(p.stackId) };
+    if (item.kind === "bar") {
+      return {
+        ...base,
+        data: undefined,
+        stackId: p.stackId == null ? undefined : getNormalizedStackId(p.stackId),
+        barSize: p.barSize,
+        minPointSize: p.minPointSize ?? 0,
+        maxBarSize: p.maxBarSize,
+        hasCustomShape: false,
+      };
+    }
     if (item.kind === "area") return { ...base, data: p.data, stackId: getNormalizedStackId(p.stackId) };
     return { ...base, data: p.data };
   }
@@ -644,6 +693,36 @@ async function runCharts(cases) {
     return out;
   }
 
+  // The bar geometry of the bar `id`: selectBarSizeList, selectBarBandSize,
+  // selectAxisBandSize, selectBarPosition and selectBarRectangles, each
+  // rectangle as [x, y, width, height, value, stackedBarStart,
+  // [background x, y, width, height], originalDataIndex].
+  function barResult(state, id) {
+    forgetLastDomains();
+    try {
+      const sizeList = bs.selectBarSizeList(state, id, false);
+      const out = {
+        id: enc(id),
+        sizeList: sizeList == null ? enc(sizeList) : sizeList.map((s) => [enc(s.stackId), enc(s.dataKeys), enc(s.barSize)]),
+        barBandSize: enc(bs.selectBarBandSize(state, id, false)),
+        axisBandSize: enc(bs.selectAxisBandSize(state, id, false)),
+      };
+      const position = bs.selectBarPosition(state, id, false);
+      out.position = position == null ? enc(position) : [enc(position.offset), enc(position.size)];
+      const rects = bs.selectBarRectangles(state, id, false, undefined);
+      out.rectangles =
+        rects == null
+          ? enc(rects)
+          : rects.map((r) => {
+              const b = r.background;
+              return [enc(r.x), enc(r.y), enc(r.width), enc(r.height), enc(r.value), enc(r.stackedBarStart), [enc(b.x), enc(b.y), enc(b.width), enc(b.height)], enc(r.originalDataIndex)];
+            });
+      return out;
+    } catch (error) {
+      return { id: enc(id), error: String(error.message) };
+    }
+  }
+
   for (const c of cases) {
     try {
       const store = createRechartsStore({
@@ -693,7 +772,8 @@ async function runCharts(cases) {
           axes.push({ axisType, id: enc(id), ...result });
         }
       }
-      parentPort.postMessage({ case: { ...encodeCase(c), axes } });
+      const bars = c.items.filter((item) => item.kind === "bar").map((item) => barResult(state, item.id));
+      parentPort.postMessage({ case: { ...encodeCase(c), axes, bars } });
     } catch (error) {
       if (error.handled) break;
       throw error;
@@ -735,7 +815,7 @@ function runWorker(cases, d3) {
 
 async function main() {
   const check = process.argv.includes("--check");
-  const cases = [...shadcnCases(), ...Array.from({ length: 1200 }, (_, i) => chartCase(i)), ...stackCases()];
+  const cases = [...shadcnCases(), ...Array.from({ length: 1200 }, (_, i) => chartCase(i)), ...stackCases(), ...barCases()];
   const charts = [];
   const powCalls = new Map();
   const log10Calls = new Map();
