@@ -27,6 +27,7 @@ Pinned Div: `92ea25a0`.
 | ID | Web feature | Work item | Owner | Size | Where | Scaffolding |
 | --- | --- | --- | --- | --- | --- | --- |
 | V1 | Inline SVG core: `svg` sizing and `viewBox`, `g`, `path`, shapes, fill and stroke, `transform`, painted as Chromium paints SVG; `view!` with SVG's attribute names. Scheduled right after the engine's Tier 0 items | 1, 13 | engine (painting), framework (`view!`) | L | `src/ui.rs` | None: the window shows the ported tick values as text instead of charts. No SVG is drawn by other means. |
+| TZ1 (proposed; not in the platform plan) | The system time zone for JavaScript `Date` local time: the zone's offset and daylight-saving rules at any time (`LocalTZA`) and its name in `Date.prototype.toString`, as Chromium takes them from the OS and ICU. Hit by d3-time's local intervals (`scale="time"` axes, M2c) | — | framework (div-platform) | M | `crates/js/src/date.rs` | Local time is UTC on every machine. Chromium in a UTC zone gives the same results (the fixtures are generated in UTC); in another zone its time-scale ticks fall on that zone's midnights, months and years instead. |
 
 ## Expected next, from the design
 

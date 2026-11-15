@@ -1,12 +1,13 @@
 //! The JavaScript values chart data is made of, with the conversions and
 //! comparisons the ported code applies to them.
 //!
-//! The model covers what JSON describes, plus `undefined`: no functions,
-//! dates, symbols or object identity. Property lookup finds own properties
+//! The model covers what JSON describes, plus `undefined` and `Date`s: no
+//! functions, symbols or object identity. Property lookup finds own properties
 //! only (array indices and `length`, string indices and `length`, object
 //! keys); inherited ones such as `toString` read as `undefined` here, where
 //! JavaScript would find a function.
 
+use crate::date::Date;
 use crate::number::{number_to_string, string_to_number};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -19,6 +20,8 @@ pub enum Value {
     Array(Vec<Value>),
     /// An object's own enumerable properties, in insertion order.
     Object(Vec<(String, Value)>),
+    /// A `Date` object (with no own properties).
+    Date(Date),
 }
 
 impl Value {
@@ -40,7 +43,7 @@ impl Value {
             Value::Bool(b) => *b,
             Value::Number(n) => !(n.is_nan() || *n == 0.0),
             Value::String(s) => !s.is_empty(),
-            Value::Array(_) | Value::Object(_) => true,
+            Value::Array(_) | Value::Object(_) | Value::Date(_) => true,
         }
     }
 
@@ -55,6 +58,8 @@ impl Value {
             Value::Number(n) => *n,
             Value::String(s) => string_to_number(s),
             Value::Array(_) | Value::Object(_) => string_to_number(&self.to_js_string()),
+            // ToPrimitive with hint number calls `valueOf`.
+            Value::Date(date) => date.time(),
         }
     }
 
@@ -78,11 +83,13 @@ impl Value {
                 .collect::<Vec<_>>()
                 .join(","),
             Value::Object(_) => "[object Object]".into(),
+            Value::Date(date) => date.to_js_string(),
         }
     }
 
-    /// `a === b` (IsStrictlyEqual, ECMA-262 7.2.15). Arrays and objects have
-    /// no identity in this model, so they are never strictly equal.
+    /// `a === b` (IsStrictlyEqual, ECMA-262 7.2.15). Arrays, objects and
+    /// dates have no identity in this model, so they are never strictly
+    /// equal.
     pub fn strict_equals(&self, other: &Value) -> bool {
         match (self, other) {
             (Value::Undefined, Value::Undefined) | (Value::Null, Value::Null) => true,
@@ -175,7 +182,7 @@ impl Key {
         Key::Number(canonical.to_bits())
     }
 
-    /// The key of a primitive value; `None` for arrays and objects, whose
+    /// The key of a primitive value; `None` for arrays, objects and dates, whose
     /// identity this model does not track.
     pub fn of(value: &Value) -> Option<Key> {
         Some(match value {
@@ -184,7 +191,7 @@ impl Key {
             Value::Bool(b) => Key::Bool(*b),
             Value::Number(n) => Key::number(*n),
             Value::String(s) => Key::String(s.clone()),
-            Value::Array(_) | Value::Object(_) => return None,
+            Value::Array(_) | Value::Object(_) | Value::Date(_) => return None,
         })
     }
 
@@ -222,6 +229,12 @@ mod tests {
             "1,,2,3"
         );
         assert_eq!(Value::Object(vec![]).to_js_string(), "[object Object]");
+        let date = Value::Date(Date::new(946_684_800_000.0));
+        assert_eq!(date.to_number(), 946_684_800_000.0);
+        assert_eq!(
+            Value::Array(vec![date]).to_js_string(),
+            "Sat Jan 01 2000 00:00:00 GMT+0000 (Coordinated Universal Time)"
+        );
     }
 
     #[test]

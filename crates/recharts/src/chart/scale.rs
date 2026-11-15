@@ -2,7 +2,7 @@
 //! uses, wrapped with Recharts' `map`, and how `combineConfiguredScale`
 //! (`state/selectors/combiners/combineConfiguredScale.js`) builds it.
 
-use d3::scale::{Band, Linear, Log};
+use d3::scale::{time_domain_number, Band, Linear, Log, Time};
 use js::{JsError, Value};
 
 use super::ChartError;
@@ -66,6 +66,7 @@ pub(crate) fn is_supported_scale_name(name: &str) -> bool {
 pub enum RechartsScale {
     Linear(Linear),
     Log(Log),
+    Time(Time),
     Band(Band),
 }
 
@@ -81,8 +82,8 @@ impl RechartsScale {
     /// `combineConfiguredScaleInternal(realScaleType, axisDomain,
     /// axisRange)`: `getD3ScaleFromType(realScaleType)` given
     /// `domain(axisDomain)` and `range(axisRange)`, `None` (`undefined`)
-    /// for a name d3-scale does not export. Linear, log, band and point
-    /// scales are ported; the other d3 scales are not yet.
+    /// for a name d3-scale does not export. Linear, log, time, band and
+    /// point scales are ported; the other d3 scales are not yet.
     pub fn configure(
         real_scale_type: &str,
         domain: &[Value],
@@ -108,6 +109,13 @@ impl RechartsScale {
                     .set_range(range.to_vec());
                 Ok(Some(RechartsScale::Log(scale)))
             }
+            "scaleTime" => {
+                let mut scale = Time::new();
+                scale
+                    .set_domain(domain.iter().map(time_domain_number).collect())
+                    .set_range(range.to_vec());
+                Ok(Some(RechartsScale::Time(scale)))
+            }
             // `scaleImplicit` is d3-scale's unknown-value symbol, not a
             // constructor, so `d3Scales[name]()` throws. The message is the
             // one V8 gives for Recharts' es6 source; a minifying bundler
@@ -128,7 +136,7 @@ impl RechartsScale {
                 Ok(Some(RechartsScale::Band(scale)))
             }
             _ if D3_SCALES.contains(&name.as_str()) => Err(ChartError::Unsupported(
-                "d3 scales other than linear, log, band and point",
+                "d3 scales other than linear, log, time, band and point",
             )),
             _ => Ok(None),
         }
@@ -141,6 +149,11 @@ impl RechartsScale {
                 scale.domain().iter().map(|n| Value::Number(*n)).collect()
             }
             RechartsScale::Log(scale) => scale.domain().iter().map(|n| Value::Number(*n)).collect(),
+            RechartsScale::Time(scale) => scale
+                .domain()
+                .into_iter()
+                .map(|t| Value::Date(js::Date::new(t)))
+                .collect(),
             RechartsScale::Band(scale) => scale.domain().to_vec(),
         }
     }
@@ -150,6 +163,7 @@ impl RechartsScale {
         match self {
             RechartsScale::Linear(scale) => scale.range().to_vec(),
             RechartsScale::Log(scale) => scale.range().to_vec(),
+            RechartsScale::Time(scale) => scale.range().to_vec(),
             RechartsScale::Band(scale) => scale.range().to_vec(),
         }
     }
@@ -157,16 +171,23 @@ impl RechartsScale {
     /// `scale.bandwidth()`, for band and point scales.
     pub fn bandwidth(&self) -> Option<f64> {
         match self {
-            RechartsScale::Linear(_) | RechartsScale::Log(_) => None,
+            RechartsScale::Linear(_) | RechartsScale::Log(_) | RechartsScale::Time(_) => None,
             RechartsScale::Band(scale) => Some(scale.bandwidth()),
         }
     }
 
-    /// `scale.ticks(count)`, for linear and log scales.
-    pub fn ticks(&self, count: f64) -> Option<Result<Vec<f64>, js::JsError>> {
+    /// `scale.ticks(count)`, for linear, log and time scales: numbers, or
+    /// Dates for a time scale.
+    pub fn ticks(&self, count: f64) -> Option<Result<Vec<Value>, js::JsError>> {
+        let numbers = |ticks: Vec<f64>| ticks.into_iter().map(Value::Number).collect();
         match self {
-            RechartsScale::Linear(scale) => Some(scale.ticks(count)),
-            RechartsScale::Log(scale) => Some(scale.ticks(count)),
+            RechartsScale::Linear(scale) => Some(scale.ticks(count).map(numbers)),
+            RechartsScale::Log(scale) => Some(scale.ticks(count).map(numbers)),
+            RechartsScale::Time(scale) => Some(Ok(scale
+                .ticks(count)
+                .into_iter()
+                .map(|t| Value::Date(js::Date::new(t)))
+                .collect())),
             RechartsScale::Band(_) => None,
         }
     }
@@ -191,6 +212,12 @@ impl RechartsScale {
                 scale.apply(input.to_number())
             }
             RechartsScale::Log(scale) => {
+                if input.is_nullish() {
+                    return None;
+                }
+                scale.apply(input.to_number())
+            }
+            RechartsScale::Time(scale) => {
                 if input.is_nullish() {
                     return None;
                 }

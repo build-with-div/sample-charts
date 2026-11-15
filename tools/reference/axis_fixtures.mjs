@@ -241,8 +241,44 @@ function d3Fixture(d3Array, d3Scale) {
       ticks: enc(scale.ticks(count)),
     });
   }
+  // Time scales (d3-time's local intervals; local time is UTC here), from
+  // their own seed. Domains stay within ±10^15 ms of the epoch, away from
+  // the ±8.64e15 limit where d3-time's filtered intervals can loop forever.
+  seed = 0x713e;
+  const time = [];
+  const spans = [1, 7, 40, 900, 4e3, 7e4, 9e5, 4e6, 2e7, 9e7, 4e8, 2e9, 9e9, 4e10, 2e11, 9e11, 4e12, 3e13];
+  const instant = () => {
+    const t = Math.round((rand() * 2 - 1) * 2e13);
+    return chance(0.2) ? t + pick([0.5, -0.5, 0.25, 0.75]) : t;
+  };
+  for (let i = 0; i < 800; i++) {
+    const start = instant();
+    const span = pick(spans) * (0.5 + rand() * 3);
+    let domain = [start, start + Math.round(span)];
+    if (chance(0.15)) domain.splice(1, 0, start + Math.round(span * rand()));
+    if (chance(0.3)) domain.reverse();
+    if (chance(0.4)) domain = domain.map((t) => (chance(0.5) ? new Date(Math.round(t)) : t));
+    const r = rand();
+    if (r < 0.03) domain[0] = pick([NaN, null, "12.5", "-0.5", 1e16, -0.4]);
+    else if (r < 0.05) domain[1] = domain[0];
+    const range = Array.from({ length: chance(0.1) ? 3 : 2 }, () => int(-500, 900) + (chance(0.3) ? rand() : 0));
+    const scale = d3Scale.scaleTime().domain(domain).range(range);
+    const d = scale.domain().map(Number);
+    const inputs = [...d, (d[0] + d[d.length - 1]) / 2, d[0] - span, instant(), NaN, Infinity, new Date(Math.round(start))];
+    // A negative or infinite count ticks every millisecond: short spans only.
+    const wide = !(Math.abs(d[d.length - 1] - d[0]) < 2e3);
+    const count = pick([undefined, 0, 1, 2, 3, 5, 6, 10, 20, 2.5, NaN, ...(wide ? [] : [-1, Infinity])]);
+    time.push({
+      domain: enc(domain),
+      range: enc(range),
+      scaleDomain: enc(scale.domain()),
+      apply: inputs.map((x) => [enc(x), enc(scale(x))]),
+      count: enc(count),
+      ticks: enc(scale.ticks(count)),
+    });
+  }
   seed = saved;
-  return { ticks, linear, band, log };
+  return { ticks, linear, band, log, time };
 }
 
 // ----------------------------------------------------------- chart fixture

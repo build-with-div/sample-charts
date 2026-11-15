@@ -2,6 +2,7 @@
 //! d3-array's `ticks`, `tickIncrement` and `tickStep`, and of d3-scale's
 //! linear, band and point scales, written by
 //! `tools/reference/axis_fixtures.mjs`. Every number must have the same bits.
+//! Time scales run in UTC, as the generator does (see `js::Date`).
 
 use d3::array::{tick_increment, tick_step, ticks};
 use d3::scale::{Band, Linear};
@@ -10,13 +11,17 @@ use serde_json::Value as Json;
 
 const FIXTURES: &str = include_str!("fixtures/d3.json");
 
-/// A tagged fixture value ("u", null, bools, "n:…", "s:…", arrays,
-/// {"o": …}) as a JavaScript value.
+/// A tagged fixture value ("u", null, bools, "n:…", "s:…", "t:…" Dates,
+/// arrays, {"o": …}) as a JavaScript value.
 fn decode(json: &Json) -> Value {
     match json {
         Json::Null => Value::Null,
         Json::Bool(b) => Value::Bool(*b),
         Json::String(s) if s == "u" => Value::Undefined,
+        Json::String(s) if s.starts_with("t:") => Value::Date(js::Date::new(match &s[2..] {
+            "NaN" => f64::NAN,
+            t => t.parse().unwrap_or_else(|_| panic!("time {t}")),
+        })),
         Json::String(s) => {
             if let Some(n) = s.strip_prefix("n:") {
                 Value::Number(match n {
@@ -59,6 +64,9 @@ fn same(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Number(x), Value::Number(y)) => {
             x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan())
+        }
+        (Value::Date(x), Value::Date(y)) => {
+            x.time().to_bits() == y.time().to_bits() || (x.time().is_nan() && y.time().is_nan())
         }
         (Value::Array(x), Value::Array(y)) => {
             x.len() == y.len() && x.iter().zip(y).all(|(a, b)| same(a, b))
@@ -347,4 +355,68 @@ fn log_scales_match_d3_scale() {
         }
     }
     finish("log scales", cases.len(), failures);
+}
+
+fn dates(values: &[f64]) -> Value {
+    Value::Array(
+        values
+            .iter()
+            .map(|t| Value::Date(js::Date::new(*t)))
+            .collect(),
+    )
+}
+
+#[test]
+fn time_scales_match_d3_scale() {
+    let fixtures: Json = serde_json::from_str(FIXTURES).unwrap();
+    let cases = fixtures["time"].as_array().unwrap();
+    let mut failures = Vec::new();
+    let mut ticks = 0;
+    for (i, case) in cases.iter().enumerate() {
+        let domain = match decode(&case["domain"]) {
+            Value::Array(items) => items,
+            other => panic!("not an array: {other:?}"),
+        };
+        let mut scale = d3::scale::Time::new();
+        scale
+            .set_domain(domain.iter().map(d3::scale::time_domain_number).collect())
+            .set_range(numbers(&case["range"]));
+        let got = dates(&scale.domain());
+        let want = decode(&case["scaleDomain"]);
+        if !same(&got, &want) {
+            failures.push(format!("time {i} domain() = {got:?}, d3 {want:?}"));
+        }
+        for pair in case["apply"].as_array().unwrap() {
+            // `scale(x)` converts with `+x`.
+            let x = decode(&pair[0]).to_number();
+            let got = opt(scale.apply(x));
+            let want = decode(&pair[1]);
+            if !same(&got, &want) {
+                failures.push(format!("time {i} scale({x:?}) = {got:?}, d3 {want:?}"));
+            }
+        }
+        // `scale.ticks(count)` passes `count ?? 10` to timeTicks.
+        let count = match decode(&case["count"]) {
+            Value::Undefined => 10.0,
+            v => v.to_number(),
+        };
+        let got = dates(&scale.ticks(count));
+        let want = decode(&case["ticks"]);
+        ticks += list_len(&want);
+        if !same(&got, &want) {
+            failures.push(format!(
+                "time {i} {:?} ticks({count}) = {got:?}, d3 {want:?}",
+                scale.domain()
+            ));
+        }
+    }
+    println!("{} time scales, {ticks} ticks", cases.len());
+    finish("time scales", cases.len(), failures);
+}
+
+fn list_len(value: &Value) -> usize {
+    match value {
+        Value::Array(items) => items.len(),
+        _ => 0,
+    }
 }
