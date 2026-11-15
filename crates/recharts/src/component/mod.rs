@@ -5,26 +5,51 @@
 //! z-index layers (`zIndex/*`), the plot area's clip path
 //! (`container/ClipPathProvider.js`) and `<Bar>` (`bar`).
 //!
+//! `<CartesianGrid>` (`grid`) and `<XAxis>` / `<YAxis>` (`axis`), whose tick
+//! labels are `<Text>`s (`text`) chosen by the tick label filter (`ticks`).
+//!
 //! A chart is given as React would get it: the chart component's props and
 //! its children, each a component and its props ([`ChartElement`]). The
 //! selectors run on the [`CartesianChart`] those props make.
 //!
-//! Not ported yet: what `<CartesianGrid>`, `<XAxis>` and `<YAxis>` draw
-//! (the grid lines and the axes measure text through the tick label filter
-//! and `<Text>`). They take part in the chart's state and their selectors
-//! run, so an exception they would throw unmounts the chart as in React,
-//! but they add no elements here; [`Rendered::not_rendered`] lists them.
+//! Recharts measures text in the document (`getStringSize`) and reads the
+//! computed font of an axis's tick labels (`getComputedStyle`); the port
+//! asks a [`Measure`] for both.
+//!
 //! Tooltips, legends, other graphical items and interaction are not ported.
 
+mod axis;
 mod bar;
+mod grid;
 mod props;
 mod svg_props;
+mod text;
+mod ticks;
 
-use js::{number_to_string, Value};
+use js::{number_to_string, Key, Value};
 
 use crate::chart::{AxisType, CartesianChart, ChartError, PlotArea};
 use crate::dom::{clsx, Element, Namespace, Node, Props};
 use svg_props::svg_properties;
+pub use text::{string_cache_key, Size};
+
+// div-gap: TM1 text measurement through the DOM (docs/framework-gaps.md).
+// Div has no `getBoundingClientRect` of a laid-out `<span>` or
+// `getComputedStyle` yet, so nothing in the app implements this; the tests
+// answer from Chrome's recorded measurements.
+/// What Recharts reads from the document it renders in.
+pub trait Measure {
+    /// `measureTextWithDOM(text, style)` (`util/DOMUtils.js`): the
+    /// `getBoundingClientRect()` size of a `<span>` holding `text`, styled
+    /// `position: absolute; top: -20000px; left: 0; padding: 0; margin: 0;
+    /// border: none; white-space: pre` and then `style`, in the document's
+    /// `<body>`.
+    fn string_size(&mut self, text: &str, style: &Props) -> Size;
+
+    /// `getComputedStyle(label)`'s `fontSize` and `letterSpacing` for the
+    /// first tick label `<text>` of an axis, as rendered in the chart.
+    fn tick_font(&mut self, label: &Element) -> (String, String);
+}
 
 /// A chart child component.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -103,9 +128,6 @@ fn radix32(mut n: u32) -> String {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Rendered {
     pub nodes: Vec<Node>,
-    /// Child components whose own elements are not rendered yet (see the
-    /// module documentation), in tree order.
-    pub not_rendered: Vec<Component>,
 }
 
 /// What a component renders: in place, and through `ZIndexLayer` portals.
@@ -189,7 +211,11 @@ fn default_chart_props() -> Vec<(&'static str, Value)> {
 /// React unmount the whole root, leaving the container empty; it is
 /// returned as the error. `ChartError::Unsupported` names what this port
 /// does not cover yet.
-pub fn render(element: &ChartElement, ids: &mut Ids) -> Result<Rendered, ChartError> {
+pub fn render(
+    element: &ChartElement,
+    ids: &mut Ids,
+    measure: &mut dyn Measure,
+) -> Result<Rendered, ChartError> {
     if !matches!(
         element.chart_name.as_str(),
         "BarChart" | "ComposedChart" | "LineChart" | "AreaChart"
@@ -198,17 +224,47 @@ pub fn render(element: &ChartElement, ids: &mut Ids) -> Result<Rendered, ChartEr
     }
     let root = element.props.clone().with_defaults(&default_chart_props());
     let chart_props = props::chart_props(&element.chart_name, &root)?;
+    let layout = chart_props
+        .layout
+        .unwrap_or(crate::chart::Layout::Horizontal);
 
     // The components report their settings, then the chart renders.
     let mut x_axes = Vec::new();
     let mut y_axes = Vec::new();
     let mut items = Vec::new();
     let mut bars = Vec::new();
-    let mut not_rendered = Vec::new();
+    // The axis settings objects in the store, by `String(id)`: a later axis
+    // with the same id replaces an earlier one.
+    let mut axis_settings: Vec<(AxisType, String, Props)> = Vec::new();
+    let mut axis_elements = Vec::new();
     for child in &element.children {
         match child.component {
-            Component::XAxis => x_axes.push(props::axis_props(&child.props, "xAxisId")?),
-            Component::YAxis => y_axes.push(props::axis_props(&child.props, "yAxisId")?),
+            Component::XAxis | Component::YAxis => {
+                let (axis_type, id_prop) = match child.component {
+                    Component::XAxis => (AxisType::XAxis, "xAxisId"),
+                    _ => (AxisType::YAxis, "yAxisId"),
+                };
+                let typed = props::axis_props(&child.props, id_prop)?;
+                match axis_type {
+                    AxisType::XAxis => x_axes.push(typed),
+                    AxisType::YAxis => y_axes.push(typed),
+                }
+                let resolved = child
+                    .props
+                    .clone()
+                    .with_defaults(&axis::default_axis_props(axis_type));
+                let settings = axis::settings_props(&resolved, axis_type, layout);
+                let id = axis_id(&resolved, id_prop)?;
+                let key = id.to_value().to_js_string();
+                match axis_settings
+                    .iter_mut()
+                    .find(|(t, k, _)| *t == axis_type && *k == key)
+                {
+                    Some(entry) => entry.2 = settings,
+                    None => axis_settings.push((axis_type, key, settings)),
+                }
+                axis_elements.push((axis_type, resolved, id));
+            }
             Component::CartesianGrid => {}
             Component::Bar => {
                 // useUniqueId('recharts-bar', props.id): a truthy id as it is.
@@ -226,14 +282,15 @@ pub fn render(element: &ChartElement, ids: &mut Ids) -> Result<Rendered, ChartEr
                 bars.push((bar, id));
             }
         }
-        if child.component != Component::Bar {
-            if !matches!(child.props.get("zIndex"), Value::Undefined) {
-                return Err(ChartError::Unsupported("z-indexes of grids and axes"));
-            }
-            not_rendered.push(child.component);
-        }
     }
     let chart = CartesianChart::new(&chart_props, &x_axes, &y_axes, &items);
+    let settings_of = |axis_type: AxisType, id: &Key| -> Props {
+        let key = id.to_value().to_js_string();
+        axis_settings
+            .iter()
+            .find(|(t, k, _)| *t == axis_type && *k == key)
+            .map_or_else(|| axis::implicit_settings(axis_type), |(_, _, s)| s.clone())
+    };
 
     // RechartsWrapper's <div>.
     let mut wrapper_props = Props::new();
@@ -262,42 +319,81 @@ pub fn render(element: &ChartElement, ids: &mut Ids) -> Result<Rendered, ChartEr
     // MainChartSurface renders once the chart has a positive size.
     if is_positive_number(&root.get("width")) && is_positive_number(&root.get("height")) {
         let plot_area = chart.plot_area();
-        let mut out = Output::default();
         let clip_path_id = format!("{}-clip", ids.unique_id("recharts"));
-        let mut bars = bars.into_iter();
-        for child in &element.children {
-            match child.component {
-                Component::Bar => {
-                    let (props, id) = bars.next().expect("one per bar");
-                    bar::render(&chart, &props, &id, plot_area, &mut out)?;
-                }
-                Component::XAxis | Component::YAxis => {
-                    let (axis_type, id_prop) = match child.component {
-                        Component::XAxis => (AxisType::XAxis, "xAxisId"),
-                        _ => (AxisType::YAxis, "yAxisId"),
-                    };
-                    chart.axis(axis_type, &axis_id(&child.props, id_prop)?)?;
-                }
-                Component::CartesianGrid => {
-                    chart.axis(AxisType::XAxis, &axis_id(&child.props, "xAxisId")?)?;
-                    chart.axis(AxisType::YAxis, &axis_id(&child.props, "yAxisId")?)?;
+        let mut sizes = text::StringSizes::default();
+        // Each axis's tick font state, '' and '' until its labels are in the
+        // document. An exception unmounts the chart before that.
+        let empty = (Value::from(""), Value::from(""));
+        let mut fonts = vec![empty; axis_elements.len()];
+        let mut renders = 0;
+        let out = loop {
+            let mut out = Output::default();
+            let mut first_labels = Vec::with_capacity(fonts.len());
+            let mut bars = bars.iter();
+            let mut axes = axis_elements.iter().zip(&fonts);
+            for child in &element.children {
+                match child.component {
+                    Component::Bar => {
+                        let (props, id) = bars.next().expect("one per bar");
+                        bar::render(&chart, props, id, plot_area, &mut out)?;
+                    }
+                    Component::XAxis | Component::YAxis => {
+                        let ((axis_type, props, id), font) = axes.next().expect("one per axis");
+                        first_labels.push(axis::render(
+                            &chart,
+                            *axis_type,
+                            props,
+                            &settings_of(*axis_type, id),
+                            id,
+                            font,
+                            &mut sizes,
+                            measure,
+                            &mut out,
+                        )?);
+                    }
+                    Component::CartesianGrid => {
+                        grid::render(
+                            &chart,
+                            &child.props,
+                            &settings_of,
+                            &mut sizes,
+                            measure,
+                            &mut out,
+                        )?;
+                    }
                 }
             }
-        }
+            // Committed: each axis reads the computed font of its first
+            // tick label and renders again when it changed.
+            let mut changed = false;
+            for (font, label) in fonts.iter_mut().zip(&first_labels) {
+                if let Some(label) = label {
+                    let (size, spacing) = measure.tick_font(label);
+                    let read = (Value::from(size), Value::from(spacing));
+                    if read != *font {
+                        *font = read;
+                        changed = true;
+                    }
+                }
+            }
+            renders += 1;
+            if !changed || renders >= 10 {
+                break out;
+            }
+        };
         wrapper
             .children
             .push(Node::Element(surface(&root, out, plot_area, &clip_path_id)));
     }
     Ok(Rendered {
         nodes: vec![Node::Element(wrapper)],
-        not_rendered,
     })
 }
 
-fn axis_id(props: &Props, name: &str) -> Result<js::Key, ChartError> {
+fn axis_id(props: &Props, name: &str) -> Result<Key, ChartError> {
     match props.get(name) {
-        Value::Undefined => Ok(js::Key::number(0.0)),
-        id => js::Key::of(&id).ok_or(ChartError::Unsupported("an axis id other than a primitive")),
+        Value::Undefined => Ok(Key::number(0.0)),
+        id => Key::of(&id).ok_or(ChartError::Unsupported("an axis id other than a primitive")),
     }
 }
 

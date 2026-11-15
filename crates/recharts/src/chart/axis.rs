@@ -290,9 +290,60 @@ pub struct PlotArea {
 /// bottom, width, height (no brush, no legend).
 pub(super) struct Offset {
     pub(super) left: f64,
+    pub(super) right: f64,
     pub(super) top: f64,
+    pub(super) bottom: f64,
     pub(super) width: f64,
     pub(super) height: f64,
+}
+
+/// `a < b` for two ids (`compareIds`): the Abstract Relational Comparison
+/// of ECMA-262 7.2.13 — strings compare by UTF-16 code units, anything else
+/// as numbers, and `NaN` compares false either way.
+fn id_less(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::String(a), Value::String(b)) => a.encode_utf16().lt(b.encode_utf16()),
+        _ => a.to_number() < b.to_number(),
+    }
+}
+
+/// `array.sort(compare)` as V8 sorts an array of fewer than 64 elements
+/// (V8's `src/builtins/array-sort.tq`: one run found by `CountAndMakeRun`,
+/// then `BinaryInsertionSort`), which decides the order even when `compare`
+/// is not consistent (ids of mixed types).
+fn v8_sort_short<T>(items: &mut [T], compare: impl Fn(&T, &T) -> std::cmp::Ordering) {
+    use std::cmp::Ordering::Less;
+    let high = items.len();
+    assert!(high < 64, "V8 uses merges of runs from 64 elements");
+    if high < 2 {
+        return;
+    }
+    // CountAndMakeRun(0, high)
+    let mut run_length = 2;
+    let descending = compare(&items[1], &items[0]) == Less;
+    for idx in 2..high {
+        let order = compare(&items[idx], &items[idx - 1]);
+        if (descending && order != Less) || (!descending && order == Less) {
+            break;
+        }
+        run_length += 1;
+    }
+    if descending {
+        items[..run_length].reverse();
+    }
+    // BinaryInsertionSort(0, run_length, high)
+    for start in run_length..high {
+        let (mut left, mut right) = (0, start);
+        while left < right {
+            let mid = left + ((right - left) >> 1);
+            if compare(&items[start], &items[mid]) == Less {
+                right = mid;
+            } else {
+                left = mid + 1;
+            }
+        }
+        items[left..=start].rotate_right(1);
+    }
 }
 
 impl CartesianChart {
@@ -387,9 +438,90 @@ impl CartesianChart {
         let bottom = bottom + sum(self.x_axes.values(), "bottom");
         Offset {
             left,
+            right,
             top,
+            bottom,
             width: math::max(self.width - left - right, 0.0),
             height: math::max(self.height - top - bottom, 0.0),
+        }
+    }
+
+    /// The chart's `width` and `height` props (`selectChartWidth`,
+    /// `selectChartHeight`).
+    pub fn size(&self) -> (f64, f64) {
+        (self.width, self.height)
+    }
+
+    /// `selectXAxisSize` / `selectYAxisSize`: the axis's width and height.
+    pub fn axis_size(&self, axis_type: AxisType, id: &Key) -> (f64, f64) {
+        let settings = self.base_axis(axis_type, id);
+        let offset = self.offset();
+        match axis_type {
+            AxisType::XAxis => (offset.width, settings.size),
+            AxisType::YAxis => (settings.size, offset.height),
+        }
+    }
+
+    /// `selectXAxisPosition` / `selectYAxisPosition`: where the axis
+    /// starts, after the axes before it on the same side
+    /// (`selectAllXAxesOffsetSteps`).
+    pub fn axis_position(&self, axis_type: AxisType, id: &Key) -> (f64, f64) {
+        let settings = self.base_axis(axis_type, id);
+        let offset = self.offset();
+        let axes = match axis_type {
+            AxisType::XAxis => &self.x_axes,
+            AxisType::YAxis => &self.y_axes,
+        };
+        // selectAllXAxesWithOffsetType
+        let mut same: Vec<&AxisSettings> = axes
+            .values()
+            .into_iter()
+            .filter(|a| a.orientation == settings.orientation && a.mirror == settings.mirror)
+            .collect();
+        v8_sort_short(&mut same, |a, b| {
+            let (a, b) = (a.id.to_value(), b.id.to_value());
+            if id_less(&a, &b) {
+                std::cmp::Ordering::Less
+            } else if id_less(&b, &a) {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        });
+        let orientation = settings.orientation.as_str();
+        let mirror = settings.mirror;
+        let mut steps: Vec<(String, f64)> = Vec::new();
+        let mut position: Option<f64> = None;
+        for axis in same {
+            let start = *position.get_or_insert(match (axis_type, orientation) {
+                (AxisType::XAxis, "top") => offset.top,
+                (AxisType::XAxis, "bottom") => self.height - offset.bottom,
+                (AxisType::YAxis, "left") => offset.left,
+                (AxisType::YAxis, "right") => self.width - offset.right,
+                _ => 0.0,
+            });
+            let need_space = match axis_type {
+                AxisType::XAxis => {
+                    (orientation == "top" && !mirror) || (orientation == "bottom" && mirror)
+                }
+                AxisType::YAxis => {
+                    (orientation == "left" && !mirror) || (orientation == "right" && mirror)
+                }
+            };
+            let size = axis.size;
+            let key = axis.id.to_value().to_js_string();
+            let step = start - f64::from(u8::from(need_space)) * size;
+            match steps.iter_mut().find(|(k, _)| *k == key) {
+                Some(entry) => entry.1 = step,
+                None => steps.push((key, step)),
+            }
+            position = Some(start + if need_space { -size } else { size });
+        }
+        let key = id.to_value().to_js_string();
+        let step = steps.iter().find(|(k, _)| *k == key).map(|(_, s)| *s);
+        match axis_type {
+            AxisType::XAxis => (offset.left, step.unwrap_or(0.0)),
+            AxisType::YAxis => (step.unwrap_or(0.0), offset.top),
         }
     }
 

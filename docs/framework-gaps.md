@@ -28,6 +28,7 @@ Pinned Div: `92ea25a0`.
 | --- | --- | --- | --- | --- | --- | --- |
 | V1 | Inline SVG core: `svg` sizing and `viewBox`, `g`, `path`, shapes, fill and stroke, `transform`, painted as Chromium paints SVG; `view!` with SVG's attribute names. Scheduled right after the engine's Tier 0 items | 1, 13 | engine (painting), framework (`view!`) | L | `src/ui.rs` | None: the window shows the ported tick values as text instead of charts. No SVG is drawn by other means. |
 | TZ1 (proposed; not in the platform plan) | The system time zone for JavaScript `Date` local time: the zone's offset and daylight-saving rules at any time (`LocalTZA`) and its name in `Date.prototype.toString`, as Chromium takes them from the OS and ICU. Hit by d3-time's local intervals (`scale="time"` axes, M2c) | — | framework (div-platform) | M | `crates/js/src/date.rs` | Local time is UTC on every machine. Chromium in a UTC zone gives the same results (the fixtures are generated in UTC); in another zone its time-scale ticks fall on that zone's midnights, months and years instead. |
+| TM1 (proposed; not in the platform plan) | Text measurement through the DOM: the `getBoundingClientRect()` size of an off-screen absolutely positioned HTML `<span>` with inline style (`white-space: pre`, the font properties given), laid out and shaped as Chromium does, and `getComputedStyle(element).fontSize` / `.letterSpacing` of an SVG `<text>`. Hit by Recharts' `getStringSize` (tick label filter, `<Text>` word wrapping) and `CartesianAxis`' font read-back (M4c) | — | engine (div-layout, div-text: the box), framework (divui: `getBoundingClientRect`, `getComputedStyle`) | M | `crates/recharts/src/component/mod.rs` (`Measure`) | None in the app: it does not render charts yet (V1), so nothing implements `Measure`. The tests answer from Chrome's recorded measurements. |
 
 ## Expected next, from the design
 
@@ -36,14 +37,14 @@ to the table above, with its `div-gap` site, when a milestone reaches it.
 
 | ID | Web feature | Work item | Owner | Size | Milestone |
 | --- | --- | --- | --- | --- | --- |
-| V2 | SVG text: `text`, `tspan`, anchors, baselines | 2 | engine | L | M4c (axis labels; the M4b element tree leaves the axes out) |
+| V2 | SVG text: `text`, `tspan`, anchors, baselines | 2 | engine | L | M4c builds the tick labels' `<text>` / `<tspan>` trees (`text-anchor`, `dy` from `verticalAnchor`), equal to Chrome's; nothing draws them until V1 and V2 |
 | S1, S2 | Selectors, `<style>` sheets, SVG properties in the cascade; shadcn's `ChartStyle` through the browser-compatible ingestion mode | 3 | engine | L | M4, M5 |
 | S3 | CSS custom properties, `var()` in SVG paint, runtime writes (`setProperty('--x')`) | 4 | engine (framework: runtime API) | M (L with `@property`) | M5 (shadcn colours) |
 | O1 | `ResizeObserver`: one API, three boxes; engine computes after layout, framework delivers before paint | 5 | engine + framework | M | M4 (`ResponsiveContainer`) |
 | R1 | `requestAnimationFrame` per document, typed handle, every window | 6 | framework | M | M6 (mount animation) |
 | V5 | Focus, `tabindex`, roles on SVG; hit testing on SVG geometry, `pointer-events` | 7, 10 | engine + framework | M | M7 |
 | V3 | `defs`, gradients, `pattern`, `clipPath`, `url(#id)` | 8 | engine | M | M6 |
-| V4 | `getBBox`, `getTotalLength`, `getPointAtLength`, `getComputedTextLength` | 9 | framework (engine geometry) | M | M4c, M6. Recharts 3.8.0 measures tick labels with an off-screen HTML `<span>` and `getBoundingClientRect` (`getStringSize`), not with SVG geometry; M4b's harness records Chrome's results (9,154 measurements, 16px Times New Roman) |
+| V4 | `getBBox`, `getTotalLength`, `getPointAtLength`, `getComputedTextLength` | 9 | framework (engine geometry) | M | M6. Recharts 3.8.0 measures tick labels with an off-screen HTML `<span>` and `getBoundingClientRect` (`getStringSize`), not with SVG geometry: that is TM1 |
 | A1 | CSS transitions on SVG properties, through the one Web Animations surface | 11 | engine (framework: Web Animations API) | L | M6 |
 | I2 | `contextmenu`; right click must not fire `click` | 14 | framework | S–M | M7 |
 | R7 | Per-element build, layout and paint cost | 15 | engine + framework | L | M6 (to measure against Chromium) |

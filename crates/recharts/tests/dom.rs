@@ -8,15 +8,25 @@
 //! same order, and the same children; text must be equal. Attribute order is
 //! not compared: it does not change what is drawn.
 //!
-//! What `<CartesianGrid>`, `<XAxis>` and `<YAxis>` draw is not ported yet
-//! (`recharts::component`): their subtrees are taken out of Chrome's tree
-//! before comparing, and counted. Everything else in the chart must match.
+//! Recharts measures text in the page and reads the computed font of tick
+//! labels; the port gets both from what the fixture recorded in Chrome for
+//! that case. A measurement the port asks for that Chrome did not make is a
+//! failure, and so is a font Chrome read that the port does not. Chrome
+//! measures more: Recharts renders the chart several times while its store
+//! fills in, and the port only renders the settled chart.
+//!
+//! When Recharts throws, React unmounts the chart: the port must throw the
+//! same exception. Messages are compared as V8 gives them for Recharts'
+//! source; the fixture's come from an esbuild bundle, which renames the
+//! `d3Scales` import to `d3_scale_exports`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use js::Value;
 use recharts::chart::ChartError;
-use recharts::component::{render, ChartElement, Component, ComponentElement, Ids};
+use recharts::component::{
+    render, string_cache_key, ChartElement, Component, ComponentElement, Ids, Measure, Size,
+};
 use recharts::dom::{Element, Namespace, Node, Props};
 use serde_json::Value as Json;
 
@@ -81,6 +91,101 @@ fn chart_element(case: &Json) -> ChartElement {
         chart_name,
         props,
         children,
+    }
+}
+
+/// What Chrome measured for one case.
+struct Recorded {
+    sizes: HashMap<String, Size>,
+    tick_fonts: Vec<(String, String)>,
+    /// Measurements and fonts the port asked for that were not recorded.
+    misses: Vec<String>,
+    /// The cache keys of the texts the port measured.
+    asked: HashSet<String>,
+    /// Whether the port read a tick label's font.
+    read_font: bool,
+}
+
+impl Recorded {
+    fn new(case: &Json) -> Recorded {
+        let mut sizes = HashMap::new();
+        for call in case["measurements"].as_array().expect("measurements") {
+            let call = call.as_array().expect("call");
+            // getStringSize gives 0 × 0 for these without measuring.
+            if matches!(decode(&call[0]), Value::Undefined | Value::Null) {
+                continue;
+            }
+            let style = Props::of(&decode(&call[1]));
+            let key = string_cache_key(&decode(&call[0]).to_js_string(), &style);
+            let size = Size {
+                width: decode(&call[2]).to_number(),
+                height: decode(&call[3]).to_number(),
+            };
+            // getStringSize caches by this key, so a key has one size.
+            if let Some(previous) = sizes.insert(key.clone(), size) {
+                assert_eq!(previous, size, "{key}");
+            }
+        }
+        let tick_fonts = case["tickFonts"]
+            .as_array()
+            .expect("tickFonts")
+            .iter()
+            .map(|f| {
+                (
+                    f[0].as_str().expect("fontSize").to_owned(),
+                    f[1].as_str().expect("letterSpacing").to_owned(),
+                )
+            })
+            .collect();
+        Recorded {
+            sizes,
+            tick_fonts,
+            misses: Vec::new(),
+            asked: HashSet::new(),
+            read_font: false,
+        }
+    }
+
+    /// How many texts Chrome measured that the port did not ask for.
+    /// Recharts renders a chart several times before its store holds every
+    /// component's settings and data, and measures in each render; the port
+    /// renders the settled chart only.
+    fn unasked(&self) -> usize {
+        self.sizes
+            .keys()
+            .filter(|key| !self.asked.contains(*key))
+            .count()
+    }
+}
+
+impl Measure for Recorded {
+    fn string_size(&mut self, text: &str, style: &Props) -> Size {
+        let key = string_cache_key(text, style);
+        self.asked.insert(key.clone());
+        match self.sizes.get(&key) {
+            Some(size) => *size,
+            None => {
+                self.misses.push(format!("getStringSize {key:?}"));
+                Size {
+                    width: 0.0,
+                    height: 0.0,
+                }
+            }
+        }
+    }
+
+    fn tick_font(&mut self, _label: &Element) -> (String, String) {
+        self.read_font = true;
+        // Chrome gave every tick label of a case the same font, or the case
+        // has none.
+        match self.tick_fonts.as_slice() {
+            [font] => font.clone(),
+            fonts => {
+                self.misses
+                    .push(format!("getComputedStyle: recorded {fonts:?}"));
+                (String::new(), String::new())
+            }
+        }
     }
 }
 
@@ -149,62 +254,6 @@ fn want(json: &Json) -> Want {
     }
 }
 
-/// The subtrees of components the port does not draw yet, by the class
-/// Recharts gives their root element.
-fn not_ported(want: &Want, components: &[Component]) -> Option<Component> {
-    let Want::Element { attributes, .. } = want else {
-        return None;
-    };
-    let class = attributes
-        .iter()
-        .find(|(n, _)| n == "class")
-        .map_or("", |(_, v)| v.as_str());
-    let tokens: Vec<&str> = class.split_ascii_whitespace().collect();
-    let has = |t: &str| tokens.contains(&t);
-    let component = if has("recharts-cartesian-grid") {
-        Component::CartesianGrid
-    } else if has("recharts-xAxis") || has("recharts-xAxis-tick-labels") {
-        Component::XAxis
-    } else if has("recharts-yAxis") || has("recharts-yAxis-tick-labels") {
-        Component::YAxis
-    } else {
-        return None;
-    };
-    components.contains(&component).then_some(component)
-}
-
-fn strip(
-    nodes: &[Want],
-    components: &[Component],
-    stripped: &mut BTreeMap<String, usize>,
-) -> Vec<Want> {
-    nodes
-        .iter()
-        .filter_map(|node| {
-            if let Some(component) = not_ported(node, components) {
-                *stripped.entry(format!("{component:?}")).or_default() += 1;
-                return None;
-            }
-            Some(match node {
-                Want::Element {
-                    tag,
-                    svg,
-                    attributes,
-                    style,
-                    children,
-                } => Want::Element {
-                    tag: tag.clone(),
-                    svg: *svg,
-                    attributes: attributes.clone(),
-                    style: style.clone(),
-                    children: strip(children, components, stripped),
-                },
-                text => text.clone(),
-            })
-        })
-        .collect()
-}
-
 /// The CSS property an IDL attribute of `CSSStyleDeclaration` names
 /// (`backgroundColor` → `background-color`, `WebkitX` → `-webkit-x`).
 fn css_property(idl: &str) -> String {
@@ -223,24 +272,30 @@ fn css_property(idl: &str) -> String {
     out
 }
 
+/// What a case's tree holds, counted.
 #[derive(Default)]
 struct Counts {
     elements: usize,
     attributes: usize,
     declarations: usize,
+    texts: usize,
+    /// Elements by the Recharts class that names them (first token).
+    by_class: BTreeMap<String, usize>,
 }
 
 fn compare(got: &[Node], want: &[Want], path: &str, counts: &mut Counts) -> Result<(), String> {
     if got.len() != want.len() {
         return Err(format!(
-            "{path}: {} children, Chrome has {}",
+            "{path}: {} children, Chrome has {}\n    port   {:?}\n    Chrome {:?}",
             got.len(),
-            want.len()
+            want.len(),
+            got.iter().map(summary).collect::<Vec<_>>(),
+            want.iter().map(want_summary).collect::<Vec<_>>(),
         ));
     }
     for (i, (g, w)) in got.iter().zip(want).enumerate() {
         match (g, w) {
-            (Node::Text(a), Want::Text(b)) if a == b => {}
+            (Node::Text(a), Want::Text(b)) if a == b => counts.texts += 1,
             (
                 Node::Element(element),
                 Want::Element {
@@ -259,6 +314,28 @@ fn compare(got: &[Node], want: &[Want], path: &str, counts: &mut Counts) -> Resu
         }
     }
     Ok(())
+}
+
+fn summary(node: &Node) -> String {
+    match node {
+        Node::Text(t) => format!("{t:?}"),
+        Node::Element(e) => format!("<{} {}>", e.tag, e.attribute("class").unwrap_or("")),
+    }
+}
+
+fn want_summary(node: &Want) -> String {
+    match node {
+        Want::Text(t) => format!("{t:?}"),
+        Want::Element {
+            tag, attributes, ..
+        } => format!(
+            "<{tag} {}>",
+            attributes
+                .iter()
+                .find(|(n, _)| n == "class")
+                .map_or("", |(_, v)| v.as_str())
+        ),
+    }
 }
 
 fn compare_element(
@@ -291,6 +368,13 @@ fn compare_element(
         ));
     }
     counts.attributes += got.len();
+    if let Some(class) = element.attribute("class") {
+        let name = class
+            .split_ascii_whitespace()
+            .find(|c| *c != "recharts-layer")
+            .unwrap_or("recharts-layer");
+        *counts.by_class.entry(name.to_owned()).or_default() += 1;
+    }
     let got_style: Vec<[String; 3]> = element
         .style
         .iter()
@@ -312,28 +396,52 @@ fn compare_element(
 }
 
 #[test]
-fn bar_charts_match_chromium() {
+fn charts_match_chromium() {
     let fixtures: Json = serde_json::from_str(FIXTURES).unwrap();
     let cases = fixtures["cases"].as_array().unwrap();
     let mut failures = Vec::new();
     let mut unsupported: BTreeMap<String, usize> = BTreeMap::new();
-    let mut stripped: BTreeMap<String, usize> = BTreeMap::new();
+    let mut thrown: BTreeMap<String, usize> = BTreeMap::new();
     let mut counts = Counts::default();
-    let (mut equal, mut thrown) = (0, 0);
+    let mut equal = 0;
+    let mut measured = 0;
+    let mut unasked = 0;
     for case in cases {
         let index = case["index"].as_str().unwrap();
         let element = chart_element(case);
-        let errors = case["errors"].as_array().unwrap();
+        let errors: Vec<&str> = case["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e.as_str().unwrap())
+            .collect();
         let dom: Vec<Want> = case["dom"].as_array().unwrap().iter().map(want).collect();
-        match render(&element, &mut Ids::new()) {
+        let mut recorded = Recorded::new(case);
+        let result = render(&element, &mut Ids::new(), &mut recorded);
+        if !recorded.misses.is_empty() {
+            failures.push(format!("{index}: not recorded: {:?}", recorded.misses));
+            continue;
+        }
+        if !recorded.tick_fonts.is_empty() && !recorded.read_font {
+            failures.push(format!(
+                "{index}: Chrome read a tick label's font, the port did not"
+            ));
+            continue;
+        }
+        unasked += recorded.unasked();
+        match result {
             Err(ChartError::Unsupported(what)) => {
                 *unsupported.entry(what.to_owned()).or_default() += 1;
             }
             Err(ChartError::Js(error)) => {
-                if errors.is_empty() || !dom.is_empty() {
-                    failures.push(format!("{index}: the port throws {error}, Chrome does not"));
+                let message = error.to_string();
+                let bundled = message.replace("d3Scales[", "d3_scale_exports[");
+                if errors != [bundled.as_str()] || !dom.is_empty() {
+                    failures.push(format!(
+                        "{index}: the port throws {message:?}, Chrome {errors:?}"
+                    ));
                 } else {
-                    thrown += 1;
+                    *thrown.entry(message).or_default() += 1;
                 }
             }
             Ok(rendered) => {
@@ -343,29 +451,34 @@ fn bar_charts_match_chromium() {
                     ));
                     continue;
                 }
-                let want = strip(&dom, &rendered.not_rendered, &mut stripped);
-                match compare(&rendered.nodes, &want, "", &mut counts) {
-                    Ok(()) => equal += 1,
+                match compare(&rendered.nodes, &dom, "", &mut counts) {
+                    Ok(()) => {
+                        equal += 1;
+                        measured += recorded.asked.len();
+                    }
                     Err(difference) => failures.push(format!("{index}: {difference}")),
                 }
             }
         }
     }
     println!(
-        "{equal} charts equal ({} elements, {} attributes, {} style declarations), \
-         {thrown} exceptions matched, of {} cases",
+        "{equal} charts equal ({} elements, {} attributes, {} style declarations, {} texts; \
+         {measured} text sizes, as measured in Chrome), of {} cases",
         counts.elements,
         counts.attributes,
         counts.declarations,
+        counts.texts,
         cases.len()
     );
-    println!("not ported, taken out of Chrome's tree: {stripped:?}");
+    println!("texts Chrome also measured in earlier renders: {unasked}");
+    println!("exceptions matched: {thrown:?}");
     println!("unsupported: {unsupported:?}");
+    println!("elements by class: {:?}", counts.by_class);
     assert!(
         failures.is_empty(),
         "{} of {} cases differ:\n{}",
         failures.len(),
         cases.len(),
-        failures[..failures.len().min(10)].join("\n")
+        failures[..failures.len().min(8)].join("\n")
     );
 }
