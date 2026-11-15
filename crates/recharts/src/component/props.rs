@@ -204,3 +204,18 @@ pub(crate) fn bar_item_props(props: &Props, id: &str) -> Result<ItemProps, Chart
     )?;
     Ok(item)
 }
+
+/// What `<Line>` reports with `SetCartesianGraphicalItem`, for the line
+/// whose resolved id is `id`.
+pub(crate) fn line_item_props(props: &Props, id: &str) -> Result<ItemProps, ChartError> {
+    let mut item = ItemProps::new(ItemKind::Line, id, data_key(props.get("dataKey"))?);
+    item.x_axis_id = key(props.get("xAxisId"))?;
+    item.y_axis_id = key(props.get("yAxisId"))?;
+    item.hide = Some(props.get("hide").is_truthy());
+    item.data = match props.get("data") {
+        Value::Undefined | Value::Null => None,
+        Value::Array(rows) => Some(rows),
+        _ => return Err(ChartError::Unsupported("line data other than an array")),
+    };
+    Ok(item)
+}

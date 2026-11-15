@@ -167,6 +167,10 @@ pub struct Step {
 /// After such an overflow inside decimal.js-light the browser's copy of the
 /// library can be left with a changed `precision` and internal state, which
 /// changes later results on the page; the port does not reproduce that.
+/// Each overflow inside `ln` raises the precision by 15, so a page that
+/// overflows repeatedly ends with `log` throwing `[DecimalError] LN10
+/// precision limit exceeded` instead (in Node 24 after 6 overflows of
+/// `getNiceTickValues([-44, 50], 2)`).
 pub const MAX_CALCULATE_STEP_DEPTH: i64 = 3_000;
 
 /// `calculateStep(min, max, tickCount, allowDecimals, correctionFactor,

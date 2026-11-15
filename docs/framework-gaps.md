@@ -44,7 +44,7 @@ to the table above, with its `div-gap` site, when a milestone reaches it.
 | R1 | `requestAnimationFrame` per document, typed handle, every window | 6 | framework | M | M6 (mount animation) |
 | V5 | Focus, `tabindex`, roles on SVG; hit testing on SVG geometry, `pointer-events` | 7, 10 | engine + framework | M | M7 |
 | V3 | `defs`, gradients, `pattern`, `clipPath`, `url(#id)` | 8 | engine | M | M6 |
-| V4 | `getBBox`, `getTotalLength`, `getPointAtLength`, `getComputedTextLength` | 9 | framework (engine geometry) | M | M6. Recharts 3.8.0 measures tick labels with an off-screen HTML `<span>` and `getBoundingClientRect` (`getStringSize`), not with SVG geometry: that is TM1 |
+| V4 | `getBBox`, `getTotalLength`, `getPointAtLength`, `getComputedTextLength` | 9 | framework (engine geometry) | M | M6. Recharts 3.8.0 measures tick labels with an off-screen HTML `<span>` and `getBoundingClientRect` (`getStringSize`), not with SVG geometry: that is TM1. A `<Line>` with its entrance animation on (Recharts' default) ends on a `strokeDasharray` computed from the path's `getTotalLength()`, so the port reports that line as unsupported until V4 lands; the DOM fixtures render lines with `isAnimationActive={false}` (M4d) |
 | A1 | CSS transitions on SVG properties, through the one Web Animations surface | 11 | engine (framework: Web Animations API) | L | M6 |
 | I2 | `contextmenu`; right click must not fire `click` | 14 | framework | S–M | M7 |
 | R7 | Per-element build, layout and paint cost | 15 | engine + framework | L | M6 (to measure against Chromium) |

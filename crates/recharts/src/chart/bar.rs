@@ -230,7 +230,7 @@ fn bar_positions(
 }
 
 /// `getBandSizeOfAxis(axis, ticks, isBar)`.
-fn band_size_of_axis(
+pub(super) fn band_size_of_axis(
     axis: Option<&AxisResult>,
     ticks: Option<&[Tick]>,
     is_bar: bool,
@@ -351,7 +351,7 @@ fn base_value(axis: &AxisResult) -> Value {
 
 impl CartesianChart {
     /// `selectXAxisIdFromGraphicalItemId` / `selectYAxisIdFromGraphicalItemId`.
-    fn item_axis_id(&self, axis_type: AxisType, id: &str) -> Key {
+    pub(super) fn item_axis_id(&self, axis_type: AxisType, id: &str) -> Key {
         match self.items.iter().find(|item| item.id == id) {
             Some(item) => match axis_type {
                 AxisType::XAxis => item.x_axis_id.clone(),
@@ -362,7 +362,7 @@ impl CartesianChart {
     }
 
     /// `selectTicksOfGraphicalItem` (`combineGraphicalItemTicks`).
-    fn graphical_item_ticks(
+    pub(super) fn graphical_item_ticks(
         &self,
         axis_type: AxisType,
         axis: &AxisResult,
