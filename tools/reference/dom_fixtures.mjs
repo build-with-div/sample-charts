@@ -25,7 +25,9 @@
 // measures text in a hidden <span>) is recorded with its result, as
 // [text, style, width, height] per distinct call: the tick label filter
 // and the axes measure text, and the port reads these measurements until it
-// renders through Div's own text layout.
+// renders through Div's own text layout. So are the font size and letter
+// spacing `getComputedStyle` gives for a tick label (`tickFonts`), which an
+// axis measures its ticks with once its labels are in the document.
 //
 // Every <Bar> renders with isAnimationActive={false}: the fixture is the
 // chart at rest, which is also the last frame of its entrance animation.
@@ -226,6 +228,19 @@ window.__recordMeasure = (args, result) => {
   seen.add(key);
   measurements.push([...call, enc(result.width), enc(result.height)]);
 };
+// CartesianAxis reads the font size and letter spacing of its first tick
+// label with getComputedStyle and measures the ticks again with them; each
+// distinct result is recorded.
+const fonts = [];
+const getComputedStyle = window.getComputedStyle;
+window.getComputedStyle = function (element, pseudo) {
+  const style = getComputedStyle.call(window, element, pseudo);
+  if (element.classList.contains("recharts-cartesian-axis-tick-value")) {
+    const font = [style.fontSize, style.letterSpacing];
+    if (!fonts.some((f) => f[0] === font[0] && f[1] === font[1])) fonts.push(font);
+  }
+  return style;
+};
 function serialize(node) {
   if (node.nodeType === Node.TEXT_NODE) return node.data;
   if (node.nodeType !== Node.ELEMENT_NODE) return null;
@@ -271,7 +286,7 @@ window.renderCase = async (spec) => {
   const span = document.getElementById("recharts_measurement_span");
   const font = span ? getComputedStyle(span).font : null;
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return { dom: Array.from(container.childNodes, serialize).filter((n) => n !== null), errors, measurements, font, settled, timeZone };
+  return { dom: Array.from(container.childNodes, serialize).filter((n) => n !== null), errors, measurements, tickFonts: fonts, font, settled, timeZone };
 };
 `;
 
@@ -507,7 +522,7 @@ async function main() {
   };
   const out = cases.map((c, i) => {
     const r = run.results[i];
-    return { ...c, dom: r.dom, errors: r.errors, measurements: r.measurements, font: r.font };
+    return { ...c, dom: r.dom, errors: r.errors, measurements: r.measurements, tickFonts: r.tickFonts, font: r.font };
   });
   const text = serialize(header, out);
   writeFileSync(fixturePath, text);
