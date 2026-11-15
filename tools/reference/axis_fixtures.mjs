@@ -455,7 +455,7 @@ function stackCase(index) {
 // Bar charts with bar sizes, gaps, maximum sizes and minimum point sizes,
 // for the bar geometry (selectBarRectangles). Their own seed keeps the
 // cases above as they were.
-function barCases() {
+export function barCases() {
   const saved = seed;
   seed = 0xba12;
   const cases = Array.from({ length: 400 }, (_, i) => barCase(`bar-${i}`));
@@ -916,8 +916,10 @@ function serialize(content) {
   return lines.join("\n") + "\n";
 }
 
-if (isMainThread) {
-  await main();
-} else {
+// Run as a script, or as one of its workers; dom_fixtures.mjs imports the
+// case generators without running either.
+if (!isMainThread) {
   await runCharts(workerData.cases);
+} else if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  await main();
 }

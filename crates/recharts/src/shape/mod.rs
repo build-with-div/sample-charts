@@ -8,6 +8,7 @@ mod sector;
 mod symbols;
 
 pub use curve::{curve_factory, get_path, BaseLine, CurvePoint};
+pub(crate) use rectangle::round;
 pub use rectangle::{get_rectangle_path, rectangle, Radius};
 pub use sector::{
     get_sector_path, get_sector_with_corner, polar_to_cartesian, sector, CornerRadius, SectorProps,

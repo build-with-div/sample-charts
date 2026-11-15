@@ -47,6 +47,8 @@ pub struct BarRectangle {
     /// `background`: x, y, width, height.
     pub background: [f64; 4],
     pub original_data_index: usize,
+    /// `payload`: the data entry the rectangle is drawn for.
+    pub payload: Value,
 }
 
 /// Everything the bar selectors compute for one `<Bar>`.
@@ -689,6 +691,7 @@ impl CartesianChart {
                 stacked_bar_start,
                 background,
                 original_data_index: index,
+                payload: entry.clone(),
             });
         }
         Some(rectangles)

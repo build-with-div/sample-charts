@@ -277,6 +277,15 @@ fn get_percent_value(percent: &Value, total: f64) -> f64 {
     }
 }
 
+/// `selectPlotArea`: the chart's area inside its margins and axes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PlotArea {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
 /// The chart offset of `selectChartOffsetInternal`: left, right, top,
 /// bottom, width, height (no brush, no legend).
 pub(super) struct Offset {
@@ -382,6 +391,28 @@ impl CartesianChart {
             width: math::max(self.width - left - right, 0.0),
             height: math::max(self.height - top - bottom, 0.0),
         }
+    }
+
+    /// `selectPlotArea`: where the graphical items draw.
+    pub fn plot_area(&self) -> PlotArea {
+        let offset = self.offset();
+        PlotArea {
+            x: offset.left,
+            y: offset.top,
+            width: offset.width,
+            height: offset.height,
+        }
+    }
+
+    /// `useNeedsClip(xAxisId, yAxisId)`: whether the axes let data overflow
+    /// the plot area, so items on them clip in x and in y.
+    pub fn needs_clip(&self, x_axis_id: &Key, y_axis_id: &Key) -> (bool, bool) {
+        (
+            self.base_axis(AxisType::XAxis, x_axis_id)
+                .allow_data_overflow,
+            self.base_axis(AxisType::YAxis, y_axis_id)
+                .allow_data_overflow,
+        )
     }
 
     /// `selectSmallestDistanceBetweenValues`.

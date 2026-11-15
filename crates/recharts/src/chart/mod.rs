@@ -20,7 +20,7 @@ mod props;
 mod scale;
 mod stack;
 
-pub use axis::{AxisResult, Tick};
+pub use axis::{AxisResult, PlotArea, Tick};
 pub use bar::{BarPosition, BarRectangle, BarResult, BarSize};
 pub use props::{
     is_categorical_axis, AxisDomainType, AxisProps, AxisSettings, AxisType, ChartProps, DataKey,

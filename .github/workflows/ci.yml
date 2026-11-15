@@ -126,3 +126,9 @@ jobs:
 
       - name: Check the d3-shape and curve fixtures
         run: node shape_fixtures.mjs --check
+
+      # The DOM fixtures come from headless Chrome (dom_fixtures.mjs <chrome>);
+      # CI has no pinned Chrome, so it checks that the recorded cases and
+      # package versions are the ones the generator would use.
+      - name: Check the Chrome DOM fixture inputs
+        run: node dom_fixtures.mjs --check-inputs
