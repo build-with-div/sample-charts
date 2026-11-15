@@ -279,11 +279,11 @@ fn get_percent_value(percent: &Value, total: f64) -> f64 {
 
 /// The chart offset of `selectChartOffsetInternal`: left, right, top,
 /// bottom, width, height (no brush, no legend).
-struct Offset {
-    left: f64,
-    top: f64,
-    width: f64,
-    height: f64,
+pub(super) struct Offset {
+    pub(super) left: f64,
+    pub(super) top: f64,
+    pub(super) width: f64,
+    pub(super) height: f64,
 }
 
 impl CartesianChart {
@@ -364,7 +364,7 @@ impl CartesianChart {
     }
 
     /// `selectChartOffsetInternal`.
-    fn offset(&self) -> Offset {
+    pub(super) fn offset(&self) -> Offset {
         let visible = |s: &&AxisSettings, side: &str| s.orientation == side && !s.mirror && !s.hide;
         let sum = |axes: Vec<&AxisSettings>, side: &str| {
             axes.into_iter()

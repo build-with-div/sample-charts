@@ -8,7 +8,8 @@ platform features Div must provide for them.
 - [crates/recharts](crates/recharts): the Recharts 3.8.0 port. So far: the
   numeric axis tick algorithm with the decimal.js-light arithmetic under it,
   the cartesian axis selectors (domain, nice ticks, range, scale and
-  ticks of every axis, stacked series included) and the path data of
+  ticks of every axis, stacked series included), the bar geometry (sizes,
+  positions and rectangles of `<Bar>`) and the path data of
   `Curve`, `Rectangle`, `Symbols` and `Sector`, tested for equality with the npm
   package.
 - [crates/d3](crates/d3): the d3 modules Recharts' browser build uses:

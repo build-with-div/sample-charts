@@ -274,6 +274,11 @@ pub struct ChartProps {
     pub margin: Option<Margin>,
     pub data: Option<Vec<Value>>,
     pub bar_category_gap: Option<Value>,
+    /// `barGap` (default 4), a number or a percentage string.
+    pub bar_gap: Option<Value>,
+    /// `barSize`, a number or a percentage string.
+    pub bar_size: Option<Value>,
+    pub max_bar_size: Option<f64>,
     pub stack_offset: Option<StackOffset>,
     pub reverse_stack_order: Option<bool>,
 }
@@ -288,6 +293,9 @@ impl ChartProps {
             margin: None,
             data: None,
             bar_category_gap: None,
+            bar_gap: None,
+            bar_size: None,
+            max_bar_size: None,
             stack_offset: None,
             reverse_stack_order: None,
         }
@@ -493,6 +501,12 @@ pub struct ItemProps {
     pub stack_id: Option<Value>,
     /// `data` of a `<Line>` or `<Area>`; `<Bar>` ignores its own.
     pub data: Option<Vec<Value>>,
+    /// `barSize` of a `<Bar>`, a number or a percentage string.
+    pub bar_size: Option<Value>,
+    /// `maxBarSize` of a `<Bar>`.
+    pub max_bar_size: Option<f64>,
+    /// `minPointSize` of a `<Bar>` (default 0); a function is not ported.
+    pub min_point_size: Option<f64>,
 }
 
 impl ItemProps {
@@ -506,6 +520,9 @@ impl ItemProps {
             hide: None,
             stack_id: None,
             data: None,
+            bar_size: None,
+            max_bar_size: None,
+            min_point_size: None,
         }
     }
 }
@@ -522,6 +539,10 @@ pub struct ItemSettings {
     /// `getNormalizedStackId(stackId)`: `String(stackId)`. Lines have none.
     pub stack_id: Option<String>,
     pub data: Option<Vec<Value>>,
+    /// A bar's `barSize`, `maxBarSize` and `minPointSize`.
+    pub bar_size: Option<Value>,
+    pub max_bar_size: Option<f64>,
+    pub min_point_size: f64,
 }
 
 impl ItemSettings {
@@ -545,6 +566,9 @@ impl ItemSettings {
                 ItemKind::Bar => None,
                 _ => props.data.clone(),
             },
+            bar_size: props.bar_size.clone(),
+            max_bar_size: props.max_bar_size,
+            min_point_size: props.min_point_size.unwrap_or(0.0),
         }
     }
 

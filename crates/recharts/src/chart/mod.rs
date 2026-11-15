@@ -1,6 +1,6 @@
-//! Recharts' cartesian chart state and the axis computations it derives
-//! from it: the domain, the nice ticks, the range, the d3 scale and the
-//! ticks of every axis.
+//! Recharts' cartesian chart state and what the selectors derive from it:
+//! the domain, the nice ticks, the range, the d3 scale and the ticks of
+//! every axis, and the size, position and rectangles of every bar.
 //!
 //! In Recharts the chart components report their props into a Redux store
 //! (`state/*Slice.js`) and the axis selectors
@@ -9,17 +9,19 @@
 //! the components' props; its methods are the selectors.
 //!
 //! Not yet ported, and reported as [`ChartError::Unsupported`] rather than
-//! computed differently: scales other than linear, log, band and point, and
-//! props given as functions.
+//! computed differently: scales other than linear, log, time, band and
+//! point, and props given as functions.
 //! Error bars, reference elements, brushes and legends are not modelled, so
 //! a chart here has none.
 
 mod axis;
+mod bar;
 mod props;
 mod scale;
 mod stack;
 
 pub use axis::{AxisResult, Tick};
+pub use bar::{BarPosition, BarRectangle, BarResult, BarSize};
 pub use props::{
     is_categorical_axis, AxisDomainType, AxisProps, AxisSettings, AxisType, ChartProps, DataKey,
     ItemKind, ItemProps, ItemSettings, Layout, Margin, Padding, StackOffset,
@@ -114,6 +116,9 @@ pub struct CartesianChart {
     data_start_index: usize,
     data_end_index: usize,
     bar_category_gap: Value,
+    bar_gap: Value,
+    bar_size: Option<Value>,
+    max_bar_size: Option<f64>,
     stack_offset: StackOffset,
     reverse_stack_order: bool,
     x_axes: AxisMap,
@@ -169,6 +174,9 @@ impl CartesianChart {
                 .bar_category_gap
                 .clone()
                 .unwrap_or_else(|| "10%".into()),
+            bar_gap: chart.bar_gap.clone().unwrap_or(Value::Number(4.0)),
+            bar_size: chart.bar_size.clone(),
+            max_bar_size: chart.max_bar_size,
             stack_offset: chart.stack_offset.clone().unwrap_or(StackOffset::None),
             reverse_stack_order: chart.reverse_stack_order.unwrap_or(false),
             x_axes: x_map,

@@ -12,8 +12,8 @@ use std::collections::BTreeMap;
 
 use js::{Key, Value};
 use recharts::chart::{
-    AxisDomainType, AxisProps, AxisResult, AxisType, CartesianChart, ChartError, ChartProps,
-    DataKey, ItemKind, ItemProps, Layout, Margin, Padding, StackGroup, StackOffset,
+    AxisDomainType, AxisProps, AxisResult, AxisType, BarResult, CartesianChart, ChartError,
+    ChartProps, DataKey, ItemKind, ItemProps, Layout, Margin, Padding, StackGroup, StackOffset,
 };
 use serde_json::Value as Json;
 
@@ -144,6 +144,9 @@ fn chart_props(value: &Value) -> ChartProps {
             }
             "data" => chart.data = Some(list(v)),
             "barCategoryGap" => chart.bar_category_gap = Some(v.clone()),
+            "barGap" => chart.bar_gap = Some(v.clone()),
+            "barSize" => chart.bar_size = Some(v.clone()),
+            "maxBarSize" => chart.max_bar_size = Some(number(v)),
             "stackOffset" => chart.stack_offset = Some(StackOffset::from_name(&string(v))),
             "reverseStackOrder" => chart.reverse_stack_order = Some(boolean(v)),
             other => panic!("chart prop {other}"),
@@ -218,6 +221,9 @@ fn item_props(value: &Value) -> ItemProps {
             "yAxisId" => item.y_axis_id = Some(key(v)),
             "stackId" => item.stack_id = Some(v.clone()),
             "data" => item.data = Some(list(v)),
+            "barSize" => item.bar_size = Some(v.clone()),
+            "maxBarSize" => item.max_bar_size = Some(number(v)),
+            "minPointSize" => item.min_point_size = Some(number(v)),
             other => panic!("item prop {other}"),
         }
     }
@@ -483,4 +489,134 @@ fn recorded_pow_calls_agree_with_the_port() {
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+fn data_key_value(key: &DataKey) -> Value {
+    match key {
+        DataKey::Name(name) => Value::String(name.clone()),
+        DataKey::Index(n) => Value::Number(*n),
+    }
+}
+
+/// The port's bar result in the fixture's shape.
+fn bar_fields(result: &BarResult) -> Vec<(&'static str, Value)> {
+    let opt = |n: Option<f64>| n.map_or(Value::Undefined, Value::Number);
+    vec![
+        (
+            "sizeList",
+            Value::Array(
+                result
+                    .size_list
+                    .iter()
+                    .map(|s| {
+                        Value::Array(vec![
+                            s.stack_id.clone().map_or(Value::Undefined, Value::String),
+                            Value::Array(s.data_keys.iter().map(data_key_value).collect()),
+                            opt(s.bar_size),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+        ("barBandSize", Value::Number(result.bar_band_size)),
+        ("axisBandSize", opt(result.axis_band_size)),
+        (
+            "position",
+            result
+                .position
+                .map_or(Value::Undefined, |p| numbers(&[p.offset, p.size])),
+        ),
+        (
+            "rectangles",
+            result
+                .rectangles
+                .as_ref()
+                .map_or(Value::Undefined, |rects| {
+                    Value::Array(
+                        rects
+                            .iter()
+                            .map(|r| {
+                                Value::Array(vec![
+                                    Value::Number(r.x),
+                                    Value::Number(r.y),
+                                    Value::Number(r.width),
+                                    Value::Number(r.height),
+                                    r.value.clone(),
+                                    opt(r.stacked_bar_start),
+                                    numbers(&r.background),
+                                    Value::Number(r.original_data_index as f64),
+                                ])
+                            })
+                            .collect(),
+                    )
+                }),
+        ),
+    ]
+}
+
+#[test]
+fn bars_match_recharts() {
+    let fixtures: Json = serde_json::from_str(FIXTURES).unwrap();
+    let cases = fixtures["cases"].as_array().unwrap();
+    let mut failures = Vec::new();
+    let (mut bars, mut rectangles, mut thrown) = (0, 0, 0);
+    for case in cases {
+        let Some(wanted) = case.get("bars").and_then(Json::as_array) else {
+            continue;
+        };
+        let chart = chart_props(&decode(&case["chart"]));
+        let x_axes: Vec<_> = list(&decode(&case["xAxes"]))
+            .iter()
+            .map(axis_props)
+            .collect();
+        let y_axes: Vec<_> = list(&decode(&case["yAxes"]))
+            .iter()
+            .map(axis_props)
+            .collect();
+        let items: Vec<_> = list(&decode(&case["items"]))
+            .iter()
+            .map(item_props)
+            .collect();
+        let store = CartesianChart::new(&chart, &x_axes, &y_axes, &items);
+        for want in wanted {
+            bars += 1;
+            let id = string(&decode(&want["id"]));
+            let label = format!("case {} bar {id}", case["index"]);
+            match (store.bar(&id), want.get("error")) {
+                (Err(error), Some(message)) => {
+                    thrown += 1;
+                    if error.to_string() != message.as_str().unwrap() {
+                        failures.push(format!("{label}: {error}, package throws {message}"));
+                    }
+                }
+                (Err(error), None) => {
+                    failures.push(format!("{label}: {error}, package does not throw"))
+                }
+                (Ok(_), Some(message)) => {
+                    failures.push(format!("{label}: does not throw, package throws {message}"))
+                }
+                (Ok(result), None) => {
+                    rectangles += result.rectangles.as_ref().map_or(0, Vec::len);
+                    for (field, got) in bar_fields(&result) {
+                        let expected = decode(&want[field]);
+                        if !same(&got, &expected) {
+                            failures
+                                .push(format!("{label} {field}: {got:?}, package {expected:?}"));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    println!("{bars} bars ({rectangles} rectangles, {thrown} exceptions matched)");
+    assert!(
+        failures.is_empty(),
+        "{} differences:
+{}",
+        failures.len(),
+        failures[..failures.len().min(30)].join(
+            "
+"
+        )
+    );
 }
