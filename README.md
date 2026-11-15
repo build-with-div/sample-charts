@@ -9,9 +9,11 @@ platform features Div must provide for them.
   numeric axis tick algorithm with the decimal.js-light arithmetic under it,
   the cartesian axis selectors (domain, nice ticks, range, scale and
   ticks of every axis, stacked series included), the bar geometry (sizes,
-  positions and rectangles of `<Bar>`) and the path data of
+  positions and rectangles of `<Bar>`), the path data of
   `Curve`, `Rectangle`, `Symbols` and `Sector`, tested for equality with the npm
-  package.
+  package, and the element tree of a bar chart (wrapper, surface, layers,
+  bars; grid and axes not yet), compared with the DOM Recharts renders in
+  headless Chrome 147.
 - [crates/d3](crates/d3): the d3 modules Recharts' browser build uses:
   d3-array's ticks, d3-time's local intervals, d3-scale's linear, log, time,
   band and point scales, d3-path and d3-shape's line and area generators
@@ -26,7 +28,9 @@ platform features Div must provide for them.
   appear once Div renders inline SVG.
 - [tools/reference](tools/reference): the pinned npm packages, run under
   Node 24 to generate the fixtures the ports are tested against
-  (`npm ci --ignore-scripts && npm run fixtures`).
+  (`npm ci --ignore-scripts && npm run fixtures`), and the DOM fixture
+  rendered in headless Chrome (`node dom_fixtures.mjs <chrome executable>`,
+  bundled with esbuild).
 - [tools/chrome](tools/chrome): probes run in headless Chrome 147 for
   results Node does not reproduce (`Math.sin`, `Math.cos`), which the
   fixture generators then use, and the check of which are correctly

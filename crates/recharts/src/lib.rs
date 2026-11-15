@@ -14,7 +14,9 @@
 //! sample's `d3` port; and the path data of the `Curve` shape (`shape`).
 
 pub mod chart;
+pub mod component;
 pub mod decimal;
+pub mod dom;
 pub mod scale;
 pub mod shape;
 

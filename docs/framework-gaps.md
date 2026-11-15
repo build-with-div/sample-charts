@@ -36,14 +36,14 @@ to the table above, with its `div-gap` site, when a milestone reaches it.
 
 | ID | Web feature | Work item | Owner | Size | Milestone |
 | --- | --- | --- | --- | --- | --- |
-| V2 | SVG text: `text`, `tspan`, anchors, baselines | 2 | engine | L | M4 (axis labels) |
+| V2 | SVG text: `text`, `tspan`, anchors, baselines | 2 | engine | L | M4c (axis labels; the M4b element tree leaves the axes out) |
 | S1, S2 | Selectors, `<style>` sheets, SVG properties in the cascade; shadcn's `ChartStyle` through the browser-compatible ingestion mode | 3 | engine | L | M4, M5 |
 | S3 | CSS custom properties, `var()` in SVG paint, runtime writes (`setProperty('--x')`) | 4 | engine (framework: runtime API) | M (L with `@property`) | M5 (shadcn colours) |
 | O1 | `ResizeObserver`: one API, three boxes; engine computes after layout, framework delivers before paint | 5 | engine + framework | M | M4 (`ResponsiveContainer`) |
 | R1 | `requestAnimationFrame` per document, typed handle, every window | 6 | framework | M | M6 (mount animation) |
 | V5 | Focus, `tabindex`, roles on SVG; hit testing on SVG geometry, `pointer-events` | 7, 10 | engine + framework | M | M7 |
 | V3 | `defs`, gradients, `pattern`, `clipPath`, `url(#id)` | 8 | engine | M | M6 |
-| V4 | `getBBox`, `getTotalLength`, `getPointAtLength`, `getComputedTextLength` | 9 | framework (engine geometry) | M | M4 (Recharts measures text), M6 |
+| V4 | `getBBox`, `getTotalLength`, `getPointAtLength`, `getComputedTextLength` | 9 | framework (engine geometry) | M | M4c, M6. Recharts 3.8.0 measures tick labels with an off-screen HTML `<span>` and `getBoundingClientRect` (`getStringSize`), not with SVG geometry; M4b's harness records Chrome's results (9,154 measurements, 16px Times New Roman) |
 | A1 | CSS transitions on SVG properties, through the one Web Animations surface | 11 | engine (framework: Web Animations API) | L | M6 |
 | I2 | `contextmenu`; right click must not fire `click` | 14 | framework | S–M | M7 |
 | R7 | Per-element build, layout and paint cost | 15 | engine + framework | L | M6 (to measure against Chromium) |
