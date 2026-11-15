@@ -12,12 +12,13 @@ platform features Div must provide for them.
   `Curve`, `Rectangle`, `Symbols` and `Sector`, tested for equality with the npm
   package.
 - [crates/d3](crates/d3): the d3 modules Recharts' browser build uses:
-  d3-array's ticks, d3-scale's linear, log, band and point scales, d3-path and
-  d3-shape's line and area generators with their curves, the stack layout
-  and the symbols.
+  d3-array's ticks, d3-time's local intervals, d3-scale's linear, log, time,
+  band and point scales, d3-path and d3-shape's line and area generators
+  with their curves, the stack layout and the symbols.
 - [crates/js](crates/js): the ECMAScript semantics the ports depend on as
   V8 implements them: number parsing and printing, `Math.log10`,
-  `Math.pow`, `Math.asin`, `Math.tan`, values and `Map` keys; and
+  `Math.pow`, `Math.asin`, `Math.tan`, values, `Date`s (local time is UTC
+  until Div knows the system time zone) and `Map` keys; and
   correctly rounded `Math.sin` and `Math.cos`, which equal Chromium's
   except where Chromium's are not correctly rounded.
 - [src](src): the app. Its window shows what the port computes; charts

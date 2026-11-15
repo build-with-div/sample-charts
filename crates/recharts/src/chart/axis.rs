@@ -830,7 +830,7 @@ impl CartesianChart {
             return Ok(ticks?
                 .iter()
                 .enumerate()
-                .filter_map(|(index, n)| tick(index, &Value::Number(*n), Value::Number(*n)))
+                .filter_map(|(index, t)| tick(index, t, t.clone()))
                 .collect());
         }
         Ok(scale

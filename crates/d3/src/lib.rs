@@ -1,7 +1,8 @@
 //! A port of the [d3](https://d3js.org) modules Recharts 3.8.0 uses for its
 //! axes: from d3-array 3.2.5 the tick and range helpers, from d3-interpolate
-//! 3.0.2 the number interpolators, and from d3-scale 4.0.3 the linear, log
-//! (base 10), band and point scales.
+//! 3.0.2 the number interpolators, from d3-time 3.1.1 the local-time
+//! intervals and ticker, and from d3-scale 4.0.3 the linear, log (base 10),
+//! time, band and point scales.
 //!
 //! These are the npm packages a page gets: Recharts' browser build imports
 //! `victory-vendor/d3-scale`, whose "import" export re-exports `d3-scale`.
@@ -23,3 +24,4 @@ pub mod interpolate;
 pub mod path;
 pub mod scale;
 pub mod shape;
+pub mod time;

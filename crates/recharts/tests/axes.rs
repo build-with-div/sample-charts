@@ -19,14 +19,17 @@ use serde_json::Value as Json;
 
 const FIXTURES: &str = include_str!("fixtures/axes.json");
 
-/// A tagged fixture value ("u", null, bools, "n:…", "s:…", arrays,
-/// {"o": …}) as a JavaScript value.
+/// A tagged fixture value ("u", null, bools, "n:…", "s:…", "t:…" Dates,
+/// arrays, {"o": …}) as a JavaScript value.
 fn decode(json: &Json) -> Value {
     match json {
         Json::Null => Value::Null,
         Json::Bool(b) => Value::Bool(*b),
         Json::String(s) if s == "u" => Value::Undefined,
-        Json::String(s) if s.starts_with("t:") => panic!("Date values are not modelled yet: {s}"),
+        Json::String(s) if s.starts_with("t:") => Value::Date(js::Date::new(match &s[2..] {
+            "NaN" => f64::NAN,
+            t => t.parse().unwrap_or_else(|_| panic!("time {t}")),
+        })),
         Json::String(s) => match s.strip_prefix("n:") {
             Some(n) => Value::Number(match n {
                 "NaN" => f64::NAN,
@@ -55,6 +58,9 @@ fn same(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Number(x), Value::Number(y)) => {
             x.to_bits() == y.to_bits() || (x.is_nan() && y.is_nan())
+        }
+        (Value::Date(x), Value::Date(y)) => {
+            x.time().to_bits() == y.time().to_bits() || (x.time().is_nan() && y.time().is_nan())
         }
         (Value::Array(x), Value::Array(y)) => {
             x.len() == y.len() && x.iter().zip(y).all(|(a, b)| same(a, b))
@@ -318,10 +324,12 @@ fn stack_groups(groups: &[StackGroup]) -> Value {
 /// not ported yet; `None` when it does not.
 fn unsupported_is_expected(reason: &str, want: &Json, applied: Option<&Value>) -> bool {
     match reason {
-        "d3 scales other than linear, log, band and point" => match want.get("realScaleType") {
+        "d3 scales other than linear, log, time, band and point" => match want.get("realScaleType")
+        {
             Some(t) => !matches!(
                 decode(t),
-                Value::String(ref s) if s == "linear" || s == "log" || s == "band" || s == "point"
+                Value::String(ref s)
+                    if s == "linear" || s == "log" || s == "time" || s == "band" || s == "point"
             ),
             None => false,
         },
