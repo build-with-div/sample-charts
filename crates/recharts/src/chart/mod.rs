@@ -9,7 +9,7 @@
 //! the components' props; its methods are the selectors.
 //!
 //! Not yet ported, and reported as [`ChartError::Unsupported`] rather than
-//! computed differently: scales other than linear, band and point, and
+//! computed differently: scales other than linear, log, band and point, and
 //! props given as functions.
 //! Error bars, reference elements, brushes and legends are not modelled, so
 //! a chart here has none.
