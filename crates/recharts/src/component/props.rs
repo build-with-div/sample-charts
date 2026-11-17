@@ -79,7 +79,6 @@ pub(crate) fn chart_props(chart_name: &str, props: &Props) -> Result<ChartProps,
     for (name, what) in [
         ("responsive", "responsive charts"),
         ("compact", "compact charts"),
-        ("baseValue", "a chart baseValue"),
     ] {
         if props.get(name).is_truthy() {
             return Err(unsupported(what));
@@ -115,6 +114,7 @@ pub(crate) fn chart_props(chart_name: &str, props: &Props) -> Result<ChartProps,
         "a stackOffset other than a string",
     )?
     .map(|name| StackOffset::from_name(&name));
+    chart.base_value = optional(props.get("baseValue"));
     chart.reverse_stack_order = boolean(
         props.get("reverseStackOrder"),
         "a reverseStackOrder other than a boolean",
@@ -217,5 +217,29 @@ pub(crate) fn line_item_props(props: &Props, id: &str) -> Result<ItemProps, Char
         Value::Array(rows) => Some(rows),
         _ => return Err(ChartError::Unsupported("line data other than an array")),
     };
+    Ok(item)
+}
+
+/// What `<Area>` reports with `SetCartesianGraphicalItem`, for the area
+/// whose resolved id is `id`.
+pub(crate) fn area_item_props(props: &Props, id: &str) -> Result<ItemProps, ChartError> {
+    let mut item = ItemProps::new(ItemKind::Area, id, data_key(props.get("dataKey"))?);
+    item.x_axis_id = key(props.get("xAxisId"))?;
+    item.y_axis_id = key(props.get("yAxisId"))?;
+    item.hide = Some(props.get("hide").is_truthy());
+    item.stack_id = match props.get("stackId") {
+        Value::Undefined => None,
+        other => Some(other),
+    };
+    item.data = match props.get("data") {
+        Value::Undefined | Value::Null => None,
+        Value::Array(rows) => Some(rows),
+        _ => return Err(ChartError::Unsupported("area data other than an array")),
+    };
+    item.base_value = match props.get("baseValue") {
+        Value::Undefined => None,
+        other => Some(other),
+    };
+    item.connect_nulls = props.get("connectNulls").is_truthy();
     Ok(item)
 }

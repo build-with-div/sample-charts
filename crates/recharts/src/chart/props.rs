@@ -281,6 +281,8 @@ pub struct ChartProps {
     pub max_bar_size: Option<f64>,
     pub stack_offset: Option<StackOffset>,
     pub reverse_stack_order: Option<bool>,
+    /// `baseValue` of the chart, which areas fall back to.
+    pub base_value: Option<Value>,
 }
 
 impl ChartProps {
@@ -298,6 +300,7 @@ impl ChartProps {
             max_bar_size: None,
             stack_offset: None,
             reverse_stack_order: None,
+            base_value: None,
         }
     }
 }
@@ -507,6 +510,10 @@ pub struct ItemProps {
     pub max_bar_size: Option<f64>,
     /// `minPointSize` of a `<Bar>` (default 0); a function is not ported.
     pub min_point_size: Option<f64>,
+    /// `baseValue` of an `<Area>`.
+    pub base_value: Option<Value>,
+    /// `connectNulls` of an `<Area>`, which its stacked values read.
+    pub connect_nulls: bool,
 }
 
 impl ItemProps {
@@ -523,6 +530,8 @@ impl ItemProps {
             bar_size: None,
             max_bar_size: None,
             min_point_size: None,
+            base_value: None,
+            connect_nulls: false,
         }
     }
 }
@@ -543,6 +552,9 @@ pub struct ItemSettings {
     pub bar_size: Option<Value>,
     pub max_bar_size: Option<f64>,
     pub min_point_size: f64,
+    /// An area's `baseValue` and `connectNulls`.
+    pub base_value: Option<Value>,
+    pub connect_nulls: bool,
 }
 
 impl ItemSettings {
@@ -569,6 +581,8 @@ impl ItemSettings {
             bar_size: props.bar_size.clone(),
             max_bar_size: props.max_bar_size,
             min_point_size: props.min_point_size.unwrap_or(0.0),
+            base_value: props.base_value.clone(),
+            connect_nulls: props.connect_nulls,
         }
     }
 

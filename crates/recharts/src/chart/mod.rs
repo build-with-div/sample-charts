@@ -1,7 +1,7 @@
 //! Recharts' cartesian chart state and what the selectors derive from it:
 //! the domain, the nice ticks, the range, the d3 scale and the ticks of
-//! every axis, the size, position and rectangles of every bar, and the
-//! points of every line.
+//! every axis, the size, position and rectangles of every bar, the points
+//! of every line, and the points and base line of every area.
 //!
 //! In Recharts the chart components report their props into a Redux store
 //! (`state/*Slice.js`) and the axis selectors
@@ -15,6 +15,7 @@
 //! Error bars, reference elements, brushes and legends are not modelled, so
 //! a chart here has none.
 
+mod area;
 mod axis;
 mod bar;
 mod line;
@@ -22,6 +23,7 @@ mod props;
 mod scale;
 mod stack;
 
+pub use area::{AreaBaseLine, AreaGeometry, AreaPoint};
 pub use axis::{AxisResult, PlotArea, Tick};
 pub use bar::{BarPosition, BarRectangle, BarResult, BarSize};
 pub use line::LinePoint;
@@ -124,6 +126,8 @@ pub struct CartesianChart {
     max_bar_size: Option<f64>,
     stack_offset: StackOffset,
     reverse_stack_order: bool,
+    /// `selectChartBaseValue`.
+    base_value: Value,
     x_axes: AxisMap,
     y_axes: AxisMap,
     items: Vec<ItemSettings>,
@@ -182,6 +186,7 @@ impl CartesianChart {
             max_bar_size: chart.max_bar_size,
             stack_offset: chart.stack_offset.clone().unwrap_or(StackOffset::None),
             reverse_stack_order: chart.reverse_stack_order.unwrap_or(false),
+            base_value: chart.base_value.clone().unwrap_or(Value::Undefined),
             x_axes: x_map,
             y_axes: y_map,
             items: items.iter().map(ItemSettings::from_props).collect(),

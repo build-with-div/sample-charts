@@ -1,19 +1,62 @@
 //! Numbers: `String(n)`, `+string`, `parseFloat`, `Math.round`, `x | 0`.
 
-/// The shortest decimal digits that round-trip `value` (finite, non-zero,
-/// sign ignored) and the decimal exponent `n` of ECMA-262
-/// Number::toString: value = 0.d1d2…dk × 10^n.
-pub fn shortest_digits(value: f64) -> (String, i64) {
-    let text = format!("{:e}", value.abs());
+/// `{:e}`'s digits and the exponent `n` with value = 0.d1d2…dk × 10^n.
+fn scientific(text: &str) -> (String, i64) {
     let (mantissa, exponent) = text.split_once('e').expect("`{:e}` writes an exponent");
     let exponent: i64 = exponent.parse().expect("`{:e}` writes an integer exponent");
     let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
     (digits, exponent + 1)
 }
 
+/// The exact decimal value of `value` (finite, non-zero, positive) as
+/// significant digits without trailing zeros and the exponent `n`. A double
+/// has at most 767 significant decimal digits.
+fn exact_digits(value: f64) -> (String, i64) {
+    let (digits, n) = scientific(&format!("{value:.800e}"));
+    (digits.trim_end_matches('0').to_owned(), n)
+}
+
+/// `0.digits × 10^n` as a double.
+fn parse_digits(digits: &str, n: i64) -> f64 {
+    format!("0.{digits}e{n}").parse().expect("decimal digits")
+}
+
+/// The shortest decimal digits that round-trip `value` (finite, non-zero,
+/// sign ignored) and the decimal exponent `n` of ECMA-262
+/// Number::toString: value = 0.d1d2…dk × 10^n.
+///
+/// Rust's `{:e}` gives the shortest round-trip digits closest to the value,
+/// as ECMA-262 asks. When the value lies exactly halfway between two such
+/// digit strings, `{:e}` rounds the last digit up, and ECMA-262 (and V8)
+/// pick the even one: 2^49 + 0.25 is "562949953421312.2" in JavaScript.
+pub fn shortest_digits(value: f64) -> (String, i64) {
+    let value = value.abs();
+    let (digits, n) = scientific(&format!("{value:e}"));
+    let last = digits.as_bytes()[digits.len() - 1] - b'0';
+    if last.is_multiple_of(2) {
+        return (digits, n);
+    }
+    let stem = &digits[..digits.len() - 1];
+    // The neighbour below (its midpoint with these digits ends in 5 after
+    // the neighbour), then the one above, unless that carries.
+    let below = format!("{stem}{}", last - 1);
+    let mut candidates = vec![(below.clone(), format!("{below}5"))];
+    if last != 9 {
+        candidates.push((format!("{stem}{}", last + 1), format!("{digits}5")));
+    }
+    for (other, midpoint) in candidates {
+        if other.starts_with('0') || parse_digits(&midpoint, n) != value {
+            continue;
+        }
+        if parse_digits(&other, n) == value && exact_digits(value) == (midpoint, n) {
+            return (other, n);
+        }
+    }
+    (digits, n)
+}
+
 /// `String(value)` for a JavaScript number (ECMA-262 Number::toString with
-/// radix 10). Rust's `{:e}` formatting yields the same shortest round-trip
-/// digits JavaScript picks.
+/// radix 10), from [`shortest_digits`].
 pub fn number_to_string(value: f64) -> String {
     if value.is_nan() {
         return "NaN".into();
@@ -243,6 +286,29 @@ mod tests {
             (1.7976931348623157e308, "1.7976931348623157e+308"),
             (f64::INFINITY, "Infinity"),
             (f64::NAN, "NaN"),
+        ];
+        for (value, text) in cases {
+            assert_eq!(number_to_string(value), text, "{value:?}");
+        }
+    }
+
+    /// Values halfway between two shortest digit strings take the even
+    /// one; the expected strings are Node 24's `String(x)`.
+    #[test]
+    fn number_to_string_breaks_ties_to_even() {
+        let base = 562949953421312.0; // 2^49, where doubles are 0.125 apart
+        let cases = [
+            (base + 0.25, "562949953421312.2"),
+            (base + 0.75, "562949953421312.8"),
+            (base + 1.25, "562949953421313.2"),
+            (base + 1.75, "562949953421313.8"),
+            (base + 3.75, "562949953421315.8"),
+            (-(base + 0.25), "-562949953421312.2"),
+            (-(1029138709677171.0 + 0.25), "-1029138709677171.2"),
+            (6755399441055744.0, "6755399441055744"),
+            (9007199254740991.0, "9007199254740991"),
+            (1e21 + 98304.0, "1.0000000000000001e+21"),
+            (123456789012345.67, "123456789012345.67"),
         ];
         for (value, text) in cases {
             assert_eq!(number_to_string(value), text, "{value:?}");

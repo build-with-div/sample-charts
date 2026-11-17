@@ -83,6 +83,7 @@ fn chart_element(case: &Json) -> ChartElement {
                 "YAxis" => Component::YAxis,
                 "Bar" => Component::Bar,
                 "Line" => Component::Line,
+                "Area" => Component::Area,
                 other => panic!("component {other}"),
             },
             props: Props::of(&decode(&child["props"])),
