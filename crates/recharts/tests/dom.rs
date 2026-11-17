@@ -82,6 +82,7 @@ fn chart_element(case: &Json) -> ChartElement {
                 "XAxis" => Component::XAxis,
                 "YAxis" => Component::YAxis,
                 "Bar" => Component::Bar,
+                "Line" => Component::Line,
                 other => panic!("component {other}"),
             },
             props: Props::of(&decode(&child["props"])),
@@ -436,7 +437,21 @@ fn charts_match_chromium() {
             Err(ChartError::Js(error)) => {
                 let message = error.to_string();
                 let bundled = message.replace("d3Scales[", "d3_scale_exports[");
-                if errors != [bundled.as_str()] || !dom.is_empty() {
+                // calculateStep's unbounded recursion overflows inside
+                // decimal.js-light's `ln`, which leaves the library's
+                // precision raised by 15 each time; once a chart has
+                // overflowed often enough in its realm (6 times for
+                // getNiceTickValues([-44, 50], 2) in Node 24), `log` throws
+                // this instead. The port throws the overflow every time
+                // (nice_ticks::MAX_CALCULATE_STEP_DEPTH); how often Chrome
+                // reran the selector first is not modelled.
+                let after_leak = message == "Maximum call stack size exceeded"
+                    && errors == ["[DecimalError] LN10 precision limit exceeded"];
+                if after_leak && dom.is_empty() {
+                    *thrown
+                        .entry(format!("{message} (Chrome: {})", errors[0]))
+                        .or_default() += 1;
+                } else if errors != [bundled.as_str()] || !dom.is_empty() {
                     failures.push(format!(
                         "{index}: the port throws {message:?}, Chrome {errors:?}"
                     ));

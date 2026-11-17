@@ -1,6 +1,7 @@
 //! Recharts' cartesian chart state and what the selectors derive from it:
 //! the domain, the nice ticks, the range, the d3 scale and the ticks of
-//! every axis, and the size, position and rectangles of every bar.
+//! every axis, the size, position and rectangles of every bar, and the
+//! points of every line.
 //!
 //! In Recharts the chart components report their props into a Redux store
 //! (`state/*Slice.js`) and the axis selectors
@@ -16,12 +17,14 @@
 
 mod axis;
 mod bar;
+mod line;
 mod props;
 mod scale;
 mod stack;
 
 pub use axis::{AxisResult, PlotArea, Tick};
 pub use bar::{BarPosition, BarRectangle, BarResult, BarSize};
+pub use line::LinePoint;
 pub use props::{
     is_categorical_axis, AxisDomainType, AxisProps, AxisSettings, AxisType, ChartProps, DataKey,
     ItemKind, ItemProps, ItemSettings, Layout, Margin, Padding, StackOffset,

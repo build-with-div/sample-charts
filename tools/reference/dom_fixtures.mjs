@@ -29,8 +29,9 @@
 // spacing `getComputedStyle` gives for a tick label (`tickFonts`), which an
 // axis measures its ticks with once its labels are in the document.
 //
-// Every <Bar> renders with isAnimationActive={false}: the fixture is the
-// chart at rest, which is also the last frame of its entrance animation.
+// Every <Bar> and <Line> renders with isAnimationActive={false}: the fixture
+// is the chart at rest. For bars that is also the last frame of the entrance
+// animation; a line's last frame sets strokeDasharray from getTotalLength().
 
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -39,7 +40,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { barCases } from "./axis_fixtures.mjs";
+import { barCases, lineCases } from "./axis_fixtures.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "..");
@@ -201,8 +202,78 @@ function generatedCases() {
   });
 }
 
+// shadcn's line chart examples (same source and changes as the bar ones)
+// whose dots are not functions: chart-line-default, -linear, -step,
+// -multiple and -dots.
+function shadcnLineCases() {
+  const data = [
+    { month: "January", desktop: 186, mobile: 80 },
+    { month: "February", desktop: 305, mobile: 200 },
+    { month: "March", desktop: 237, mobile: 120 },
+    { month: "April", desktop: 73, mobile: 190 },
+    { month: "May", desktop: 209, mobile: 130 },
+    { month: "June", desktop: 214, mobile: 140 },
+  ];
+  const monthAxis = { dataKey: "month", tickLine: false, axisLine: false, tickMargin: 8 };
+  const chart = { chartName: "LineChart", width: 500, height: 300, accessibilityLayer: true, data, margin: { left: 12, right: 12 } };
+  const line = (key, props) => element("Line", { dataKey: key, stroke: `var(--color-${key})`, strokeWidth: 2, dot: false, isAnimationActive: false, ...props });
+  const cases = [
+    ["default", [line("desktop", { type: "natural" })]],
+    ["linear", [line("desktop", { type: "linear" })]],
+    ["step", [line("desktop", { type: "step" })]],
+    ["multiple", [line("desktop", { type: "monotone" }), line("mobile", { type: "monotone" })]],
+    ["dots", [line("desktop", { type: "natural", dot: { fill: "var(--color-desktop)" }, activeDot: { r: 6 } })]],
+  ];
+  return cases.map(([name, lines]) => ({
+    index: `shadcn-line-${name}`,
+    chart,
+    children: [element("CartesianGrid", { vertical: false }), element("XAxis", monthAxis), ...lines],
+  }));
+}
+
+// The 300 line charts of axis_fixtures.mjs (lineCases), with the props that
+// change only what is drawn: curve types, dots, connectNulls, colours,
+// dashes, class names and z-indexes. Their own seed keeps the cases above as
+// they were.
+function generatedLineCases() {
+  const saved = seed;
+  seed = 0x11ed;
+  const cases = lineCases().map((c) => {
+    const children = [];
+    if (chance(0.6)) children.push(element("CartesianGrid", pick([{}, { vertical: false }, { strokeDasharray: "3 3" }])));
+    for (const props of c.xAxes) children.push(element("XAxis", props));
+    for (const props of c.yAxes) children.push(element("YAxis", props));
+    for (const item of c.items) {
+      const { kind, ...props } = item;
+      if (chance(0.5)) delete props.id;
+      if (kind === "line") {
+        if (chance(0.7)) {
+          props.type = pick(["linear", "monotone", "natural", "step", "stepBefore", "stepAfter", "basis", "basisClosed", "basisOpen", "bump", "bumpX", "bumpY", "linearClosed", "monotoneX", "monotoneY", "cardinal"]);
+        }
+        if (chance(0.5)) {
+          props.dot = pick([false, true, { r: 5 }, { fill: "red", strokeWidth: 3 }, { clipDot: false }, { clipDot: false, r: 6, className: "d" }, { r: "4" }]);
+        }
+        if (chance(0.25)) props.connectNulls = true;
+        if (chance(0.5)) props.stroke = pick(["#2563eb", "var(--color-desktop)", "red", "none"]);
+        if (chance(0.3)) props.strokeWidth = pick([1, 2, 2.5, "3"]);
+        if (chance(0.1)) props.strokeDasharray = pick(["5 5", "3 3 1", [4, 2]]);
+        if (chance(0.1)) props.fill = pick(["none", "#eee"]);
+        if (chance(0.15)) props.name = pick(["Desktop", 7, ""]);
+        if (chance(0.1)) props.className = pick(["line-a", "x  y"]);
+        if (chance(0.05)) props.opacity = 0.8;
+        if (chance(0.1)) props.zIndex = pick([0, 50, 450, 1000]);
+      }
+      props.isAnimationActive = false;
+      children.push(element(kind === "line" ? "Line" : "Bar", props));
+    }
+    return { index: c.index, chart: c.chart, children };
+  });
+  seed = saved;
+  return cases;
+}
+
 function allCases() {
-  return [...shadcnCases(), ...generatedCases()].map((c) => ({
+  return [...shadcnCases(), ...generatedCases(), ...shadcnLineCases(), ...generatedLineCases()].map((c) => ({
     index: c.index,
     chart: enc(c.chart),
     children: c.children.map((child) => ({ type: child.type, props: enc(child.props) })),

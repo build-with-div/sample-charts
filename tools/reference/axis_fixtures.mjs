@@ -490,6 +490,35 @@ function barCase(index) {
   return c;
 }
 
+// Line charts, and composed charts with lines among bars, for the line
+// points (selectLinePoints). Not part of axes.json: dom_fixtures.mjs renders
+// them. Their own seed keeps the cases above as they were.
+export function lineCases() {
+  const saved = seed;
+  seed = 0x11e5;
+  const cases = Array.from({ length: 300 }, (_, i) => lineCase(`line-${i}`));
+  seed = saved;
+  return cases;
+}
+
+function lineCase(index) {
+  const c = chartCase(index);
+  c.chart.chartName = chance(0.75) ? "LineChart" : "ComposedChart";
+  if (!c.chart.data && chance(0.8)) c.chart.data = chartData(int(1, 12));
+  const xIds = [0, ...c.xAxes.map((p) => p.xAxisId).filter((id) => id !== undefined && id !== 0)];
+  const yIds = [0, ...c.yAxes.map((p) => p.yAxisId).filter((id) => id !== undefined && id !== 0)];
+  c.items = Array.from({ length: int(1, 4) }, (_, j) => {
+    const item = { kind: c.chart.chartName === "LineChart" || chance(0.7) ? "line" : "bar", id: `item-${j}` };
+    if (!chance(0.05)) item.dataKey = pick(["a", "b", "a", "b", "x", "nested.v", "missing"]);
+    if (chance(0.08)) item.hide = true;
+    if (xIds.length > 1 && chance(0.3)) item.xAxisId = pick(xIds);
+    if (yIds.length > 1 && chance(0.3)) item.yAxisId = pick(yIds);
+    if (item.kind === "line" && chance(0.12)) item.data = chartData(int(0, 6));
+    return item;
+  });
+  return c;
+}
+
 // The shadcn chart examples of docs/design.md, as they mount.
 function shadcnCases() {
   const barData = [

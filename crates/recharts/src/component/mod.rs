@@ -3,7 +3,7 @@
 //! `<svg>` surface (`chart/CartesianChart.js`, `CategoricalChart.js`,
 //! `RechartsWrapper.js`, `container/RootSurface.js`, `Surface.js`), its
 //! z-index layers (`zIndex/*`), the plot area's clip path
-//! (`container/ClipPathProvider.js`) and `<Bar>` (`bar`).
+//! (`container/ClipPathProvider.js`), `<Bar>` (`bar`) and `<Line>` (`line`).
 //!
 //! `<CartesianGrid>` (`grid`) and `<XAxis>` / `<YAxis>` (`axis`), whose tick
 //! labels are `<Text>`s (`text`) chosen by the tick label filter (`ticks`).
@@ -21,6 +21,7 @@
 mod axis;
 mod bar;
 mod grid;
+mod line;
 mod props;
 mod svg_props;
 mod text;
@@ -28,7 +29,7 @@ mod ticks;
 
 use js::{number_to_string, Key, Value};
 
-use crate::chart::{AxisType, CartesianChart, ChartError, PlotArea};
+use crate::chart::{AxisType, CartesianChart, ChartError, Layout, PlotArea};
 use crate::dom::{clsx, Element, Namespace, Node, Props};
 use svg_props::svg_properties;
 pub use text::{string_cache_key, Size};
@@ -58,6 +59,7 @@ pub enum Component {
     XAxis,
     YAxis,
     Bar,
+    Line,
 }
 
 /// One child element of a chart: its component and props.
@@ -136,8 +138,45 @@ struct Output {
     inline: Vec<Node>,
     /// Portal contents in mount order, by `String(zIndex)`.
     portals: Vec<(String, Vec<Node>)>,
+    /// Portal contents that mount a commit later, after all of `portals`:
+    /// a `ZIndexLayer` inside another one's portal whose z-index is not a
+    /// default (see [`nested_z_index_layer`]).
+    late_portals: Vec<(String, Vec<Node>)>,
     /// The z-indexes registered with `registerZIndexPortal`, as keys.
     registered: Vec<String>,
+}
+
+/// Whether `<ZIndexLayer zIndex>` renders its children a commit after the
+/// default layers' portals: its z-index is a portal one (not 0) that
+/// `DefaultZIndexes` lacks, so its layer only exists once the registration
+/// has rendered it.
+fn is_late_z_index(z_index: &Value) -> bool {
+    matches!(z_index, Value::Number(z) if z.is_finite() && *z != 0.0 && !DEFAULT_Z_INDEXES.contains(z))
+}
+
+/// `<ZIndexLayer zIndex>` inside the children of `<ZIndexLayer outer>`.
+///
+/// Every layer's portal element only reaches the store after the first
+/// commit, so portals render from the second; a layer that is not a
+/// default renders a commit later still. A nested layer mounts with its
+/// outer layer's children, so under a late outer layer its portal content
+/// mounts a commit after every other portal's and React appends it to the
+/// end of its layer.
+fn nested_z_index_layer(
+    outer: &Value,
+    z_index: &Value,
+    nodes: Vec<Node>,
+    out: &mut Output,
+) -> Result<(), ChartError> {
+    if !is_late_z_index(outer) {
+        return z_index_layer(z_index, nodes, out);
+    }
+    let mut inner = Output::default();
+    z_index_layer(z_index, nodes, &mut inner)?;
+    out.inline.extend(inner.inline);
+    out.registered.extend(inner.registered);
+    out.late_portals.extend(inner.portals);
+    Ok(())
 }
 
 /// `<ZIndexLayer zIndex>`: children render in place for no z-index or 0,
@@ -224,15 +263,14 @@ pub fn render(
     }
     let root = element.props.clone().with_defaults(&default_chart_props());
     let chart_props = props::chart_props(&element.chart_name, &root)?;
-    let layout = chart_props
-        .layout
-        .unwrap_or(crate::chart::Layout::Horizontal);
+    let layout = chart_props.layout.unwrap_or(Layout::Horizontal);
 
     // The components report their settings, then the chart renders.
     let mut x_axes = Vec::new();
     let mut y_axes = Vec::new();
     let mut items = Vec::new();
     let mut bars = Vec::new();
+    let mut lines = Vec::new();
     // The axis settings objects in the store, by `String(id)`: a later axis
     // with the same id replaces an earlier one.
     let mut axis_settings: Vec<(AxisType, String, Props)> = Vec::new();
@@ -280,6 +318,21 @@ pub fn render(
                 bar.set("id", id.clone());
                 items.push(props::bar_item_props(&bar, &id.to_js_string())?);
                 bars.push((bar, id));
+            }
+            Component::Line => {
+                // useUniqueId('recharts-line', props.id), as for a bar.
+                let mut line = child
+                    .props
+                    .clone()
+                    .with_defaults(&line::default_line_props());
+                let generated = ids.use_id();
+                let id = match line.get("id") {
+                    id if id.is_truthy() => id,
+                    _ => Value::String(format!("recharts-line-{generated}")),
+                };
+                line.set("id", id.clone());
+                items.push(props::line_item_props(&line, &id.to_js_string())?);
+                lines.push((line, id));
             }
         }
     }
@@ -330,12 +383,17 @@ pub fn render(
             let mut out = Output::default();
             let mut first_labels = Vec::with_capacity(fonts.len());
             let mut bars = bars.iter();
+            let mut lines = lines.iter();
             let mut axes = axis_elements.iter().zip(&fonts);
             for child in &element.children {
                 match child.component {
                     Component::Bar => {
                         let (props, id) = bars.next().expect("one per bar");
                         bar::render(&chart, props, id, plot_area, &mut out)?;
+                    }
+                    Component::Line => {
+                        let (props, id) = lines.next().expect("one per line");
+                        line::render(&chart, props, id, layout, plot_area, &mut out)?;
                     }
                     Component::XAxis | Component::YAxis => {
                         let ((axis_type, props, id), font) = axes.next().expect("one per axis");
@@ -472,7 +530,7 @@ fn surface(root: &Props, out: Output, plot_area: PlotArea, clip_path_id: &str) -
         let mut g = Element::svg("g");
         g.prop("tabIndex", &Value::Number(-1.0));
         g.prop("className", &format!("recharts-zIndex-layer_{key}").into());
-        for (portal, nodes) in &out.portals {
+        for (portal, nodes) in out.portals.iter().chain(&out.late_portals) {
             if *portal == key {
                 g.children.extend(nodes.iter().cloned());
             }
