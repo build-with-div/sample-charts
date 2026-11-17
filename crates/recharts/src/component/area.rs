@@ -6,7 +6,7 @@
 //! The area renders at rest with `isAnimationActive={false}`: the first
 //! frame `AreaWithAnimation` renders, with its animation clip path layer.
 //! The entrance animation itself (`JavascriptAnimate` stepping `t` on
-//! animation frames), `label`s and dots given as elements or functions are
+//! animation frames, not ported yet), `label`s and dots given as elements or functions are
 //! reported as unsupported. `activeDot` only renders while the tooltip
 //! points at a point, which is not modelled (no pointer).
 
