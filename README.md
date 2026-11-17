@@ -33,7 +33,8 @@ platform features Div must provide for them.
   Node 24 to generate the fixtures the ports are tested against
   (`npm ci --ignore-scripts && npm run fixtures`), and the DOM fixture
   rendered in headless Chrome (`node dom_fixtures.mjs <chrome executable>`,
-  bundled with esbuild).
+  bundled with esbuild); `animation_probe.mjs` lists the browser APIs
+  Recharts' entrance animations call in Chrome.
 - [tools/chrome](tools/chrome): probes run in headless Chrome 147 for
   results Node does not reproduce (`Math.sin`, `Math.cos`), which the
   fixture generators then use, and the check of which are correctly
