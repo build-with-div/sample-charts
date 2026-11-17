@@ -14,7 +14,7 @@ use js::Value;
 
 use super::svg_props::svg_properties;
 use super::{nested_z_index_layer, z_index_layer, Output};
-use crate::chart::{CartesianChart, ChartError, Layout, LinePoint, PlotArea};
+use crate::chart::{CartesianChart, ChartError, Layout, PlotArea};
 use crate::dom::{clsx, Element, Node, Props};
 use crate::shape::{get_path, BaseLine, CurvePoint};
 
@@ -46,7 +46,7 @@ pub(super) fn default_line_props() -> Vec<(&'static str, Value)> {
 const DOTS_Z_INDEX: f64 = 600.0;
 
 /// `<Layer className>` with the other props' SVG attributes.
-fn layer(class_name: &[Value], rest: &Props) -> Element {
+pub(super) fn layer(class_name: &[Value], rest: &Props) -> Element {
     let mut props = Props::new();
     let mut classes = vec![Value::from("recharts-layer")];
     classes.extend_from_slice(class_name);
@@ -55,7 +55,7 @@ fn layer(class_name: &[Value], rest: &Props) -> Element {
     Element::svg("g").props(&props)
 }
 
-fn clip_path(id: String, x: f64, y: f64, width: f64, height: f64) -> Element {
+pub(super) fn clip_path(id: String, x: f64, y: f64, width: f64, height: f64) -> Element {
     let mut rect = Props::new();
     rect.set("x", Value::Number(x));
     rect.set("y", Value::Number(y));
@@ -80,7 +80,7 @@ fn dot_object(dot: &Value) -> Option<Props> {
 }
 
 /// `isClipDot(dot)`.
-fn is_clip_dot(dot: &Value) -> bool {
+pub(super) fn is_clip_dot(dot: &Value) -> bool {
     match dot_object(dot) {
         Some(props) if props.has("clipDot") => props.get("clipDot").is_truthy(),
         _ => true,
@@ -88,7 +88,7 @@ fn is_clip_dot(dot: &Value) -> bool {
 }
 
 /// `getRadiusAndStrokeWidthFromDot(dot)`.
-fn radius_and_stroke_width(dot: &Value) -> (f64, f64) {
+pub(super) fn radius_and_stroke_width(dot: &Value) -> (f64, f64) {
     let Some(props) = dot_object(dot).map(|p| svg_properties(&p)) else {
         return (3.0, 2.0);
     };
@@ -108,8 +108,48 @@ fn is_number(value: &Value) -> bool {
     matches!(value, Value::Number(n) if !n.is_nan())
 }
 
-fn coordinate(c: Option<f64>) -> Value {
+pub(super) fn coordinate(c: Option<f64>) -> Value {
     c.map_or(Value::Null, Value::Number)
+}
+
+/// The `<defs>` of a graphical item whose axes let data overflow:
+/// `GraphicalItemClipPath`, and the dots' clip path when `dot.clipDot` is
+/// false. `None` when neither axis needs a clip.
+pub(super) fn clip_defs(
+    (clip_x, clip_y): (bool, bool),
+    plot_area: PlotArea,
+    id: &str,
+    dot: &Value,
+) -> Option<Element> {
+    if !(clip_x || clip_y) {
+        return None;
+    }
+    let PlotArea {
+        x: left,
+        y: top,
+        width,
+        height,
+    } = plot_area;
+    let mut defs = Element::svg("defs");
+    defs.children.push(Node::Element(clip_path(
+        format!("clipPath-{id}"),
+        if clip_x { left } else { left - width / 2.0 },
+        if clip_y { top } else { top - height / 2.0 },
+        if clip_x { width } else { width * 2.0 },
+        if clip_y { height } else { height * 2.0 },
+    )));
+    if !is_clip_dot(dot) {
+        let (r, stroke_width) = radius_and_stroke_width(dot);
+        let dot_size = r * 2.0 + stroke_width;
+        defs.children.push(Node::Element(clip_path(
+            format!("clipPath-dots-{id}"),
+            left - dot_size / 2.0,
+            top - dot_size / 2.0,
+            width + dot_size,
+            height + dot_size,
+        )));
+    }
+    Some(defs)
 }
 
 /// `<Line>` with its resolved props (defaults applied, `id` resolved).
@@ -215,28 +255,7 @@ pub(super) fn render(
         &["recharts-line".into(), state.get("className")],
         &Props::new(),
     );
-    let clip_dot = is_clip_dot(&dot);
-    if need_clip {
-        let mut defs = Element::svg("defs");
-        // GraphicalItemClipPath
-        defs.children.push(Node::Element(clip_path(
-            format!("clipPath-{id_string}"),
-            if clip_x { left } else { left - width / 2.0 },
-            if clip_y { top } else { top - height / 2.0 },
-            if clip_x { width } else { width * 2.0 },
-            if clip_y { height } else { height * 2.0 },
-        )));
-        if !clip_dot {
-            let (r, stroke_width) = radius_and_stroke_width(&dot);
-            let dot_size = r * 2.0 + stroke_width;
-            defs.children.push(Node::Element(clip_path(
-                format!("clipPath-dots-{id_string}"),
-                left - dot_size / 2.0,
-                top - dot_size / 2.0,
-                width + dot_size,
-                height + dot_size,
-            )));
-        }
+    if let Some(defs) = clip_defs((clip_x, clip_y), plot_area, &id_string, &dot) {
         line.children.push(Node::Element(defs));
     }
 
@@ -296,56 +315,93 @@ pub(super) fn render(
     }
 
     // LineDotsWrapper
-    if dot.is_truthy() || points.len() == 1 {
-        let base = svg_properties(&state.filter(|key| key != "id"));
-        let dots = dots(&points, &dot, &base, props.get("dataKey"))?;
-        let mut dots_layer = layer(&["recharts-line-dots".into()], &{
-            let mut p = Props::new();
-            if need_clip {
-                let infix = if clip_dot { "" } else { "dots-" };
-                p.set(
-                    "clipPath",
-                    format!("url(#clipPath-{infix}{id_string})").into(),
-                );
-            }
-            p
-        });
-        dots_layer.children.extend(dots);
-        nested_z_index_layer(
-            &props.get("zIndex"),
-            &Value::Number(DOTS_Z_INDEX),
-            vec![Node::Element(dots_layer)],
-            out,
-        )?;
-    }
+    let base = svg_properties(&state.filter(|key| key != "id"));
+    let xy: Vec<_> = points.iter().map(|p| (p.x, p.y)).collect();
+    render_dots(
+        &xy,
+        &dot,
+        &base,
+        DotsLayer {
+            class_name: "recharts-line-dots",
+            dot_class_name: "recharts-line-dot",
+            need_clip,
+            clip_path_id: &id_string,
+            outer_z_index: &props.get("zIndex"),
+        },
+        out,
+    )?;
     z_index_layer(&props.get("zIndex"), vec![Node::Element(line)], out)
+}
+
+/// Where `<Dots>` renders.
+pub(super) struct DotsLayer<'a> {
+    pub class_name: &'static str,
+    pub dot_class_name: &'static str,
+    pub need_clip: bool,
+    pub clip_path_id: &'a str,
+    /// The z-index of the item's own `ZIndexLayer`, which `<Dots>`' layer
+    /// sits in.
+    pub outer_z_index: &'a Value,
+}
+
+/// `<Dots>` (`component/Dots.js`) in the scatter z-index layer, when the
+/// dots render: `dot` is truthy or there is exactly one point.
+pub(super) fn render_dots(
+    points: &[(Option<f64>, Option<f64>)],
+    dot: &Value,
+    base: &Props,
+    layer_of: DotsLayer,
+    out: &mut Output,
+) -> Result<(), ChartError> {
+    if !(dot.is_truthy() || points.len() == 1) {
+        return Ok(());
+    }
+    let dots = dots(points, dot, base, layer_of.dot_class_name);
+    let mut dots_layer = layer(&[layer_of.class_name.into()], &{
+        let mut p = Props::new();
+        if layer_of.need_clip {
+            let infix = if is_clip_dot(dot) { "" } else { "dots-" };
+            p.set(
+                "clipPath",
+                format!("url(#clipPath-{infix}{})", layer_of.clip_path_id).into(),
+            );
+        }
+        p
+    });
+    dots_layer.children.extend(dots);
+    nested_z_index_layer(
+        layer_of.outer_z_index,
+        &Value::Number(DOTS_Z_INDEX),
+        vec![Node::Element(dots_layer)],
+        out,
+    )
 }
 
 /// `<Dots>`' dot items: a `<Dot>` per point with a position.
 fn dots(
-    points: &[LinePoint],
+    points: &[(Option<f64>, Option<f64>)],
     dot: &Value,
     base: &Props,
-    _data_key: Value,
-) -> Result<Vec<Node>, ChartError> {
+    dot_class_name: &str,
+) -> Vec<Node> {
     let custom = dot_object(dot).map(|p| svg_properties(&p));
     let class_name = clsx(&[
-        "recharts-line-dot".into(),
+        dot_class_name.into(),
         match dot {
             Value::Bool(_) => Value::from(""),
             other => other.get("className"),
         },
     ]);
     let mut nodes = Vec::new();
-    for point in points {
+    for (x, y) in points {
         let mut p = Props::new();
         p.set("r", Value::Number(3.0));
         p.spread_props(base);
         if let Some(custom) = &custom {
             p.spread_props(custom);
         }
-        let cx = point.x.map_or(Value::Undefined, Value::Number);
-        let cy = point.y.map_or(Value::Undefined, Value::Number);
+        let cx = x.map_or(Value::Undefined, Value::Number);
+        let cy = y.map_or(Value::Undefined, Value::Number);
         // Dot
         let r = p.get("r");
         if !(is_number(&cx) && is_number(&cy) && is_number(&r)) {
@@ -361,5 +417,5 @@ fn dots(
         circle.set("r", r);
         nodes.push(Node::Element(Element::svg("circle").props(&circle)));
     }
-    Ok(nodes)
+    nodes
 }

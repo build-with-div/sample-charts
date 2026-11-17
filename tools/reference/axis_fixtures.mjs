@@ -519,6 +519,42 @@ function lineCase(index) {
   return c;
 }
 
+// Area charts, and composed charts with areas among bars and lines, for the
+// area geometry (selectArea): stacks, ranged values, base values and items
+// with their own data. Not part of axes.json: dom_fixtures.mjs renders
+// them. Their own seed keeps the cases above as they were.
+export function areaCases() {
+  const saved = seed;
+  seed = 0xa4ea;
+  const cases = Array.from({ length: 300 }, (_, i) => areaCase(`area-${i}`));
+  seed = saved;
+  return cases;
+}
+
+function areaCase(index) {
+  const c = chartCase(index);
+  c.chart.chartName = chance(0.7) ? "AreaChart" : chance(0.85) ? "ComposedChart" : "LineChart";
+  if (!c.chart.data && chance(0.8)) c.chart.data = chartData(int(1, 12));
+  if (chance(0.1)) c.chart.baseValue = pick(["dataMin", "dataMax", 0, 20, -5, "x"]);
+  const xIds = [0, ...c.xAxes.map((p) => p.xAxisId).filter((id) => id !== undefined && id !== 0)];
+  const yIds = [0, ...c.yAxes.map((p) => p.yAxisId).filter((id) => id !== undefined && id !== 0)];
+  c.items = Array.from({ length: int(1, 4) }, (_, j) => {
+    const item = { kind: c.chart.chartName !== "ComposedChart" || chance(0.7) ? "area" : pick(["bar", "line"]), id: `item-${j}` };
+    if (!chance(0.05)) item.dataKey = pick(["a", "b", "a", "b", "r", "x", "nested.v", "missing"]);
+    if (chance(0.08)) item.hide = true;
+    if (xIds.length > 1 && chance(0.3)) item.xAxisId = pick(xIds);
+    if (yIds.length > 1 && chance(0.3)) item.yAxisId = pick(yIds);
+    if (item.kind !== "line" && chance(0.35)) item.stackId = pick(["a", "a", "b", 1]);
+    if (item.kind === "area") {
+      if (chance(0.12)) item.data = chartData(int(0, 6));
+      if (chance(0.15)) item.baseValue = pick(["dataMin", "dataMax", 0, 50, -10, null]);
+      if (chance(0.2)) item.connectNulls = true;
+    }
+    return item;
+  });
+  return c;
+}
+
 // The shadcn chart examples of docs/design.md, as they mount.
 function shadcnCases() {
   const barData = [

@@ -24,7 +24,7 @@ fn is_number(n: f64) -> bool {
 }
 
 /// `getValueByDataKey(entry, dataKey)`.
-fn value_by_data_key(entry: &Value, key: Option<&DataKey>) -> Value {
+pub(super) fn value_by_data_key(entry: &Value, key: Option<&DataKey>) -> Value {
     match key {
         Some(key) => key.value_of(entry),
         None => Value::Undefined,
@@ -42,7 +42,7 @@ fn direct_key(key: Option<&DataKey>) -> Option<String> {
 }
 
 /// `getCateCoordinateOfLine({ axis, ticks, bandSize, entry, index })`.
-fn cate_coordinate(
+pub(super) fn cate_coordinate(
     axis: &AxisResult,
     ticks: &[Tick],
     band_size: f64,

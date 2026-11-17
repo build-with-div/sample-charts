@@ -18,6 +18,7 @@
 //!
 //! Tooltips, legends, other graphical items and interaction are not ported.
 
+mod area;
 mod axis;
 mod bar;
 mod grid;
@@ -60,6 +61,7 @@ pub enum Component {
     YAxis,
     Bar,
     Line,
+    Area,
 }
 
 /// One child element of a chart: its component and props.
@@ -271,6 +273,7 @@ pub fn render(
     let mut items = Vec::new();
     let mut bars = Vec::new();
     let mut lines = Vec::new();
+    let mut areas = Vec::new();
     // The axis settings objects in the store, by `String(id)`: a later axis
     // with the same id replaces an earlier one.
     let mut axis_settings: Vec<(AxisType, String, Props)> = Vec::new();
@@ -334,6 +337,21 @@ pub fn render(
                 items.push(props::line_item_props(&line, &id.to_js_string())?);
                 lines.push((line, id));
             }
+            Component::Area => {
+                // useUniqueId('recharts-area', props.id), as for a bar.
+                let mut area = child
+                    .props
+                    .clone()
+                    .with_defaults(&area::default_area_props());
+                let generated = ids.use_id();
+                let id = match area.get("id") {
+                    id if id.is_truthy() => id,
+                    _ => Value::String(format!("recharts-area-{generated}")),
+                };
+                area.set("id", id.clone());
+                items.push(props::area_item_props(&area, &id.to_js_string())?);
+                areas.push((area, id));
+            }
         }
     }
     let chart = CartesianChart::new(&chart_props, &x_axes, &y_axes, &items);
@@ -384,6 +402,7 @@ pub fn render(
             let mut first_labels = Vec::with_capacity(fonts.len());
             let mut bars = bars.iter();
             let mut lines = lines.iter();
+            let mut areas = areas.iter();
             let mut axes = axis_elements.iter().zip(&fonts);
             for child in &element.children {
                 match child.component {
@@ -394,6 +413,18 @@ pub fn render(
                     Component::Line => {
                         let (props, id) = lines.next().expect("one per line");
                         line::render(&chart, props, id, layout, plot_area, &mut out)?;
+                    }
+                    Component::Area => {
+                        let (props, id) = areas.next().expect("one per area");
+                        area::render(
+                            &chart,
+                            &element.chart_name,
+                            props,
+                            id,
+                            layout,
+                            plot_area,
+                            &mut out,
+                        )?;
                     }
                     Component::XAxis | Component::YAxis => {
                         let ((axis_type, props, id), font) = axes.next().expect("one per axis");
