@@ -289,6 +289,12 @@ Output goes to `docs/probes/out/` (ignored); the quoted runs are in
   97 (max 24), area 1,791 (max 4). So item 1 has to paint SVG with
   Chromium's SVG paint setup; drawing paths with default Skia settings is
   not enough.
+  These counts are the real-zoom baseline: Chromium recaptured on 16 November
+  2026 with scale 2 through `--force-device-scale-factor` (Div RFC 0010,
+  launcher at Div `b6907b07`), Chrome for Testing 147.0.7727.50 headless on
+  Linux (WSL2), 2 runs, `results/fidelity.json`. The earlier capture with
+  CDP-emulated device metrics is history; its 8 images were byte for byte the
+  same.
 
 ## Workarounds (scaffolding only)
 

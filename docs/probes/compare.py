@@ -4,12 +4,15 @@ with the Div renders, pixel for pixel.
 
 Run on Linux (WSL here) after `cargo test --release --test fidelity_sample`:
 
-    python3 compare.py --div-checkout PATH_TO_DIV_565db46 [--out out/fidelity]
+    python3 compare.py --div-checkout PATH_TO_DIV [--out out/fidelity]
 
-Chromium is launched by Div's own `run_all_pixel_comparisons.render_chrome`
-(the components harness path: headless, --disable-gpu, CDP device metrics)
-at 400x200 CSS px, scale 1 and 2. Pages hold geometry only (no text), so the
-font environment does not matter.
+The Div renders come from the probes' pinned Div (`Cargo.toml`). Chromium is
+launched by `run_all_pixel_comparisons.render_chrome` of the Div checkout
+given, which must be at b6907b07 or later: headless, --disable-gpu, at
+400x200 CSS px, scale 1 and 2, with scale 2 at real zoom
+(`--force-device-scale-factor`, Div RFC 0010) rather than CDP-emulated
+device metrics. Pages hold geometry only (no text), so the font environment
+does not matter.
 """
 
 from __future__ import annotations
